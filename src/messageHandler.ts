@@ -65,7 +65,24 @@ function buildFallbackReply(valor: number, descricao: string, tipo: TipoGasto): 
   return `${buildHead(valor, descricao, tipo)}\n⚠️ Não consegui buscar os saldos agora. Tente !saldo para verificar.`;
 }
 
+// Chat id the message belongs to, in both directions (incoming: from; outgoing
+// fromMe: to). id.remote is the chat id regardless of direction — for a group
+// it is the group JID (...@g.us), unaffected by LID (@lid) sender addressing.
+function chatIdOf(msg: Message): string {
+  const remote = (msg as unknown as { id?: { remote?: string } }).id?.remote;
+  const to = (msg as unknown as { to?: string }).to;
+  return remote || (msg.fromMe ? to ?? msg.from : msg.from);
+}
+
 async function isTargetGroup(msg: Message): Promise<boolean> {
+  // Preferred path: match by group id from the already-serialized message.
+  // Avoids msg.getChat(), whose getChatModel evaluate breaks when WhatsApp Web
+  // updates its internal modules (error "r"), now triggered by LID migration.
+  if (config.targetGroupId) {
+    return chatIdOf(msg) === config.targetGroupId;
+  }
+
+  // Fallback: match by group name (requires getChat, which may be broken).
   try {
     const chat = await msg.getChat();
     if (!chat.isGroup) return false;
@@ -77,11 +94,17 @@ async function isTargetGroup(msg: Message): Promise<boolean> {
 }
 
 async function getContactName(msg: Message): Promise<string> {
+  // notifyName / author are on the serialized message (no evaluate) and survive
+  // even when getContact's injected path is broken. Never fall back to msg.from
+  // for a group (that is the group id, not the sender).
+  const data = (msg as unknown as { _data?: { notifyName?: string } })._data;
+  const notifyName = data?.notifyName;
+  const author = (msg as unknown as { author?: string }).author;
   try {
     const contact = await msg.getContact();
-    return contact.pushname || contact.name || contact.number || msg.from;
+    return contact.pushname || contact.name || contact.number || notifyName || author || msg.from;
   } catch {
-    return msg.from;
+    return notifyName || author || msg.from;
   }
 }
 

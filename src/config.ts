@@ -4,6 +4,7 @@ import path from 'path';
 interface Config {
   spreadsheetId: string;
   targetGroupName: string;
+  targetGroupId: string;
   sheetGastosName: string;
   cellSaldoSemanal: string;
   cellSaldoMensal: string;
@@ -44,6 +45,7 @@ function loadConfig(): Config {
   return {
     spreadsheetId: process.env.SPREADSHEET_ID!,
     targetGroupName: process.env.TARGET_GROUP_NAME!,
+    targetGroupId: (process.env.TARGET_GROUP_ID ?? '').trim(),
     sheetGastosName: process.env.SHEET_GASTOS_NAME!,
     cellSaldoSemanal: process.env.CELL_SALDO_SEMANAL!,
     cellSaldoMensal: process.env.CELL_SALDO_MENSAL!,
