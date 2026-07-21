@@ -1,0 +1,16 @@
+services:
+  bot:
+    build: .
+    container_name: fin-zap-bot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./.wwebjs_auth:/app/.wwebjs_auth
+      - ./.wwebjs_cache:/app/.wwebjs_cache
+      - ./credentials.json:/app/credentials.json:ro
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "node dist/index.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
