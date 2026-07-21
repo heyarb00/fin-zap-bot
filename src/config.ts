@@ -7,6 +7,8 @@ interface Config {
   sheetGastosName: string;
   cellSaldoSemanal: string;
   cellSaldoMensal: string;
+  cellLimiteMensal: string;
+  cellOrcamentoSemanal: string;
   nodeEnv: string;
   credentialsPath: string;
 }
@@ -45,6 +47,8 @@ function loadConfig(): Config {
     sheetGastosName: process.env.SHEET_GASTOS_NAME!,
     cellSaldoSemanal: process.env.CELL_SALDO_SEMANAL!,
     cellSaldoMensal: process.env.CELL_SALDO_MENSAL!,
+    cellLimiteMensal: process.env.CELL_LIMITE_MENSAL ?? 'Dashboard!B3',
+    cellOrcamentoSemanal: process.env.CELL_ORCAMENTO_SEMANAL ?? 'Dashboard!B13',
     nodeEnv: process.env.NODE_ENV!,
     credentialsPath: path.resolve(credentialsPath),
   };

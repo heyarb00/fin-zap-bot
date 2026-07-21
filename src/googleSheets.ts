@@ -65,3 +65,92 @@ export async function readSaldos(): Promise<Saldos> {
   ]);
   return { semanal, mensal };
 }
+
+export interface Budgets {
+  limiteMensal: number | null;
+  orcamentoSemanal: number | null;
+}
+
+export async function readBudgets(): Promise<Budgets> {
+  const [limiteMensal, orcamentoSemanal] = await Promise.all([
+    readCell(config.cellLimiteMensal),
+    readCell(config.cellOrcamentoSemanal),
+  ]);
+  return { limiteMensal, orcamentoSemanal };
+}
+
+let gastosSheetId: number | null = null;
+
+async function getGastosSheetId(): Promise<number> {
+  if (gastosSheetId !== null) return gastosSheetId;
+  const api = await getClient();
+  const res = await api.spreadsheets.get({ spreadsheetId: config.spreadsheetId });
+  const sheet = res.data.sheets?.find((s) => s.properties?.title === config.sheetGastosName);
+  const id = sheet?.properties?.sheetId;
+  if (id === undefined || id === null) {
+    throw new Error(`sheet not found: ${config.sheetGastosName}`);
+  }
+  gastosSheetId = id;
+  return id;
+}
+
+export interface StoredExpense {
+  data: string;
+  quem: string;
+  valor: number;
+  descricao: string;
+  tipo: string;
+}
+
+function toStoredExpense(r: unknown[]): StoredExpense {
+  return {
+    data: String(r[0] ?? ''),
+    quem: String(r[1] ?? ''),
+    valor: typeof r[2] === 'number' ? r[2] : Number(r[2]) || 0,
+    descricao: String(r[3] ?? ''),
+    tipo: String(r[4] ?? ''),
+  };
+}
+
+// All expense rows (excluding the header row).
+export async function listExpenses(): Promise<StoredExpense[]> {
+  const api = await getClient();
+  const res = await api.spreadsheets.values.get({
+    spreadsheetId: config.spreadsheetId,
+    range: `${config.sheetGastosName}!A2:E`,
+    valueRenderOption: 'UNFORMATTED_VALUE',
+  });
+  const rows = res.data.values ?? [];
+  return rows.filter((r) => r && r.length > 0).map(toStoredExpense);
+}
+
+// Deletes the last data row of Gastos. Returns the removed row, or null if none.
+export async function undoLastExpense(): Promise<StoredExpense | null> {
+  const api = await getClient();
+  const res = await api.spreadsheets.values.get({
+    spreadsheetId: config.spreadsheetId,
+    range: `${config.sheetGastosName}!A:E`,
+    valueRenderOption: 'UNFORMATTED_VALUE',
+  });
+  const rows = res.data.values ?? [];
+  if (rows.length <= 1) return null; // only header (or empty)
+
+  const lastIndex = rows.length - 1; // 0-based, header at index 0
+  const removed = toStoredExpense(rows[lastIndex]);
+
+  const sheetId = await getGastosSheetId();
+  await api.spreadsheets.batchUpdate({
+    spreadsheetId: config.spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          deleteDimension: {
+            range: { sheetId, dimension: 'ROWS', startIndex: lastIndex, endIndex: lastIndex + 1 },
+          },
+        },
+      ],
+    },
+  });
+  logger.info({ removed }, 'expense undone');
+  return removed;
+}
