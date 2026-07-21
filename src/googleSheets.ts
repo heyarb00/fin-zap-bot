@@ -95,7 +95,8 @@ async function getGastosSheetId(): Promise<number> {
 }
 
 export interface StoredExpense {
-  data: string;
+  // Raw column-A value: a serial number (datetime cell) or a string.
+  data: string | number;
   quem: string;
   valor: number;
   descricao: string;
@@ -103,8 +104,9 @@ export interface StoredExpense {
 }
 
 function toStoredExpense(r: unknown[]): StoredExpense {
+  const raw = r[0];
   return {
-    data: String(r[0] ?? ''),
+    data: typeof raw === 'number' ? raw : String(raw ?? ''),
     quem: String(r[1] ?? ''),
     valor: typeof r[2] === 'number' ? r[2] : Number(r[2]) || 0,
     descricao: String(r[3] ?? ''),

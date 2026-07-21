@@ -13,7 +13,7 @@ import {
   StoredExpense,
 } from './googleSheets';
 import { detectLimitAlerts } from './alerts';
-import { isInCurrentWeek } from './week';
+import { isInCurrentWeek, cellDateLabel } from './week';
 
 const queue = new PQueue({ concurrency: 1 });
 
@@ -169,10 +169,7 @@ async function handleHelpCommand(msg: Message): Promise<void> {
 }
 
 function formatExtratoLine(e: StoredExpense): string {
-  const dataHora = e.data.trim();
-  const ddmm = dataHora.slice(0, 5); // DD/MM
-  const hhmm = dataHora.slice(11, 16); // HH:mm
-  const when = hhmm ? `${ddmm} ${hhmm}` : ddmm;
+  const when = cellDateLabel(e.data);
   const tipo = e.tipo ? ` (${e.tipo})` : '';
   return `${when} — R$ ${e.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} - ${e.descricao}${tipo}`;
 }

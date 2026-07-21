@@ -26,10 +26,14 @@ Texto estático, não grava nada. Lista formato de lançamento + comandos
 - Reply: `🗑️ Removido: R$ 50,00 - almoço (Semanal)` ou `Nada para desfazer.`
 - Serializado pela fila existente (concurrency 1).
 
-## 3. `!extrato` (semana atual, seg–dom)
+## 3. `!extrato` (semana atual, **dom–sáb** — igual ao Dashboard)
 - `googleSheets.listExpenses()` lê `Gastos!A:E` (pula header).
-- `src/week.ts` (puro, testável): calcula intervalo da semana em TZ São Paulo e
-  filtra por data da coluna A (`DD/MM/YYYY`).
+- `src/week.ts` (puro, testável): intervalo da semana em TZ São Paulo, **domingo a
+  sábado** (o Dashboard usa `WEEKDAY(...,1)` = início no domingo).
+- Coluna A vem como **serial de datetime** (lido UNFORMATTED) ou string; `cellToYmd`
+  e `cellDateLabel` normalizam ambos.
+- Lista todos os gastos da semana (Mensal incluído, com tag). O total da lista pode
+  divergir do "gasto da semana" do Dashboard, que exclui Mensal (B11 `<>"Mensal"`).
 - Reply: cabeçalho + linhas `dd/mm HH:mm — R$ X - desc (tipo)` + `Total: R$ Y`.
 - Cap de 30 linhas (as mais recentes); excedente vira nota `(+N mais)`.
 - Sem gastos → `Nenhum gasto nesta semana.`
