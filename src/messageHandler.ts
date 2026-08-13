@@ -14,6 +14,7 @@ import {
 } from './googleSheets';
 import { detectLimitAlerts } from './alerts';
 import { isInCurrentWeek, cellDateLabel } from './week';
+import { buildMonthlyOverview, MonthlyOverview } from './monthly';
 
 const queue = new PQueue({ concurrency: 1 });
 
@@ -179,6 +180,7 @@ const HELP_TEXT = [
   '',
   '• `!saldo`    → saldos restantes (semana e mês)',
   '• `!extrato`  → gastos desta semana',
+  '• `!mes`      → resumo do mês, semana a semana',
   '• `!desfazer` → apaga o último gasto lançado',
   '• `!help`     → esta ajuda',
 ].join('\n');
@@ -229,6 +231,64 @@ async function handleExtratoCommand(msg: Message): Promise<void> {
   }
 }
 
+const MESES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+function money(v: number): string {
+  return `R$ ${Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+const p2 = (n: number): string => String(n).padStart(2, '0');
+
+function formatMonthly(o: MonthlyOverview): string {
+  const lines: string[] = [`📅 Resumo de ${MESES[o.mes - 1]} — limite ${money(o.limite)}`];
+
+  for (const s of o.semanas) {
+    const range = `${p2(s.startDay)}–${p2(s.endDay)}`;
+    let cell: string;
+    if (s.status === 'past') {
+      const emoji = s.value >= 0 ? '🟢' : '🔴';
+      const sign = s.value >= 0 ? '+' : '−';
+      const label = s.value >= 0 ? 'sobrou' : 'estourou';
+      cell = `${emoji} ${sign}${money(s.value)}   ${label}`;
+    } else if (s.status === 'current') {
+      cell =
+        s.value >= 0
+          ? `⏳ ${money(s.value)}   ainda esta semana`
+          : `🔴 −${money(s.value)}   estourou (semana atual)`;
+    } else {
+      cell = `⚪ ${money(s.value)}   previsto`;
+    }
+    lines.push(`Sem ${s.index} (${range}): ${cell}`);
+  }
+
+  const saldo = o.saldoMes >= 0 ? money(o.saldoMes) : `⚠️ −${money(o.saldoMes)}`;
+  lines.push('');
+  lines.push(`Fixos (Mensal): ${money(o.totalMensal)} · Saldo do mês: ${saldo}`);
+  return lines.join('\n');
+}
+
+async function handleMesCommand(msg: Message): Promise<void> {
+  try {
+    const [gastos, budgets] = await Promise.all([listExpenses(), readBudgets()]);
+    const overview = buildMonthlyOverview(new Date(), budgets.limiteMensal, gastos);
+    if (!overview) {
+      await msg.reply('⚠️ Limite mensal não configurado na planilha.');
+      return;
+    }
+    await msg.reply(formatMonthly(overview));
+  } catch (err) {
+    logger.error({ err }, 'mes command failed');
+    try {
+      await msg.reply('⚠️ Não consegui montar o resumo do mês agora.');
+    } catch (replyErr) {
+      logger.error({ err: replyErr }, 'failed to send mes error reply');
+    }
+  }
+}
+
 async function handleUndoCommand(msg: Message): Promise<void> {
   try {
     const removed = await undoLastExpense();
@@ -270,6 +330,10 @@ export async function handleMessage(msg: Message): Promise<void> {
     }
     if (cmd === '!extrato') {
       await queue.add(() => handleExtratoCommand(msg));
+      return;
+    }
+    if (cmd === '!mes' || cmd === '!mensal') {
+      await queue.add(() => handleMesCommand(msg));
       return;
     }
     if (cmd === '!desfazer' || cmd === '!undo') {

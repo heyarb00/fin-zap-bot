@@ -1,13 +1,13 @@
 const TZ = 'America/Sao_Paulo';
 
-interface DateParts {
+export interface DateParts {
   y: number;
   m: number;
   d: number;
 }
 
 // Current calendar date in São Paulo timezone.
-function spDateParts(now: Date): DateParts {
+export function spDateParts(now: Date): DateParts {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: TZ,
     year: 'numeric',
