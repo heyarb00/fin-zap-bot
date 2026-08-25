@@ -73,7 +73,7 @@ lê `Gastos` (append A:D, leitura A2:D) e as 4 células do Dashboard.
 |------|---------|
 | Escopo | Um spec, implementação faseada |
 | Aba cartão | Renomear `Recorrentes` → `Cartão de Crédito`; deletar a antiga; descartar breakdown legado |
-| Despesas Fixas | Aba nova, **grid item×mês** (preserva marcação verde por mês), seções 1ª/2ª quinzena + PJ, **coluna "Dia"** (dia do venc.), linha de total por mês; migrar com cores (copyPaste) |
+| Despesas Fixas | Aba nova, **grid item×mês** (preserva marcação verde por mês), seções **"Dia 10" / "Dia 20"** (dois blocos de pagamento) + PJ, linha de total por mês; migrar com cores (copyPaste). Sem coluna de dia — o bloco já é o dia |
 | Merge | `Dashboard` absorve o `Painel`; mantém nome `Dashboard` e células `B3/B5/B13/B14`; deletar `Painel` |
 | setup-sheets | Parar de tocar no Dashboard (remover/guardar `setupDashboard`) |
 
@@ -111,12 +111,14 @@ service-account (padrão já usado).
 2. `copyPaste` (PASTE_NORMAL, preserva cores/verde) do bloco `Evolução!C18:BZ43`
    → nova aba (só o bloco das fixas em dinheiro, com labels de seção; as linhas
    45–46 do Cartão **não** migram — ficam no Evolução).
-   Layout alvo: col A item, col B **Dia** (novo, vazio p/ preencher), meses a
-   partir da mesma coluna dos dados (alinhar com `Evolução` col D = abr/26).
+   Layout alvo: rótulos das seções como **"Dia 10"** (ex-1ª quinzena, 19–25),
+   **"Dia 20"** (ex-2ª quinzena, 29–37) e **PJ** (41–43); meses alinhados com
+   `Evolução` (col D = abr/26). Sem coluna de dia — o bloco já indica o dia
+   (pagamentos em dois blocos: dia 10 e dia 20).
 3. Adicionar linha **Total mês** = `SUM` das linhas de item por coluna.
 4. Row1 de meses: espelhar `='Evolução Gastos'!D1…` (alinhamento garantido).
 5. No `Evolução`: **esvaziar** os dados `D19:BZ43` (manter col C labels e as
-   linhas p/ não deslocar posições; opcional: ocultar as linhas esvaziadas).
+   linhas p/ não deslocar posições) e **ocultar** as linhas esvaziadas (18–43).
 6. Repontar `Evolução!D17:BZ17` = `='Despesas Fixas'!D<total>…` (coluna a coluna).
 - **Reconciliação:** `Evolução!17` por mês **idêntico** ao snapshot (zero-diff);
   `Evolução!62 (SALDO)` inalterado; cores verdes presentes na nova aba.
@@ -125,8 +127,8 @@ service-account (padrão já usado).
 1. Reapontar `Evolução!C46:BZ46` para o motor pelo nome atual `Recorrentes`, com
    offset +5: `Evolução!D46 =Recorrentes!I44`, `E46=J44`, … (col Evolução `c` →
    `Recorrentes` `c+5`). Cobrir `D:BZ`.
-2. (Opcional) estender colunas mensais do motor de `BZ` → `CE` (+5) para cobrir a
-   cauda de 5 meses que hoje lê vazio.
+2. **Não** estender o motor além de `BZ`: os últimos ~5 meses do `Evolução!46`
+   (offset +5 → `CA:CE`) leem vazio = 0, **igual a hoje** (sem regressão).
 3. Deletar a aba `Cartão de Crédito` (antiga/exibição).
 4. Renomear `Recorrentes` → `Cartão de Crédito`. O Sheets **auto-atualiza** as
    refs de `Evolução!46` de `Recorrentes!` → `'Cartão de Crédito'!`.
@@ -179,7 +181,7 @@ Por mês, comparando snapshot antes/depois (tolerância ~R$0,01):
 | Janela `#REF!` ao deletar aba antiga do cartão | Reapontar `Evolução!46` pro motor **antes** de deletar; rename auto-atualiza |
 | Offset de coluna +5 errado | Reconciliar `Evolução!46` valor a valor vs snapshot |
 | `setup-sheets` clobberar Dashboard | Fase 4 neutraliza; até lá, **não rodar** `npm run setup-sheets` |
-| Cauda de 5 meses do cartão lendo vazio | Estender motor `BZ`→`CE` (opcional) |
+| Cauda de 5 meses do cartão lendo vazio | Aceito: lê 0 como hoje (sem regressão); motor não estendido |
 
 ---
 
