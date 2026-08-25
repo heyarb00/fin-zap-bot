@@ -45,14 +45,19 @@ Label na col C, valores `D:BZ` por mês. Linha 1 = régua de meses (preservada).
 | 19 | **Cartão de Crédito** | `='Cartão de Crédito'!<total 44 do mês>` | Fixo |
 | 20 | **Variável (Gastos)** | `=SUMIFS(Gastos!B:B; Gastos!A:A; ">="&mês; Gastos!A:A; "<"&EDATE(mês;1))` | Variável |
 | 22 | **SALDO** | `=Receita − DespFixas − Cartão − Variável − Investimento` | |
-| 24 | Meta Fatura Cartão | editável (migra o valor atual) | |
-| 25 | Delta Cartão | `=Meta Fatura − Cartão real (r19)` | |
+| 24 | Meta Fatura Cartão | editável (migra o valor atual, ex r71) | |
+| 25 | **Limite variável (Objetivo)** | `=Meta Fatura(r24) − Cartão(r19)` — **o bot lê isto** (Dashboard B3 = "Limite do mês") | |
 | 27 | Fixos % | `=(DespFixas + Cartão) / Receita` | meta 50% |
 | 28 | Variável % | `=Variável(Gastos) / Receita` | meta 30% |
 | 29 | Poupança % | `=(Investimento + SALDO) / Receita` | meta 20% |
 
-**Descartado:** zumbi 18–43, lixo manual 57–58, plugs 50/53/74/75, e todos os buracos.
-**Meta Fatura + Delta:** mantidos (decisão do usuário), reposicionados no bloco Resultado (r24–25) — alimentam o gráfico "Fatura: real vs meta" do Dashboard.
+**⚠️ Dependência load-bearing:** o `Dashboard!B3` ("Limite do mês" = `limiteMensal` do bot) faz `INDEX('Evolução Gastos'!50:50; MATCH(mês em row 1))`. A antiga r50 ("Objetivo Gasto Variável" = `MetaFatura − Cartão fixo`) **não é plug descartável — é o orçamento mensal do bot.** No layout novo ela vira a **r25 "Limite variável (Objetivo)"**, mesma semântica (`Meta Fatura − Cartão`). O `Dashboard!B3` é reapontado de `50:50` pra `25:25`.
+
+**Meta Fatura + Delta (decisão do usuário — mantidos, reorganizados):** no modelo novo o "Delta" (Meta − fatura) e o "Objetivo/Limite" (Meta − cartão) **colapsam no mesmo valor** (fatura = cartão, pois avulsos saíram do cartão), então viram **uma linha só** (r25). Meta Fatura editável fica na r24. Alimentam o gráfico "Fatura: real vs meta" do Dashboard.
+
+**Descartado:** zumbi 18–43, lixo manual 57–58, plugs redundantes r53 (Cartão-variável) / r74 (Total cartões) / r75 (Delta antigo) — verificado que nada externo os referencia. **r50 NÃO é descartada** (vira r25). E todos os buracos.
+
+**Ordem das linhas de Meta invest (r15/r16):** mantida como está na aba viva (r15 = "Meta de investimentos" R$ `=D2*D16`; r16 = "Meta invest %" editável) — evita remexer no bloco copiado. (O spec anterior listava %/R$ invertidos; adota-se a ordem viva.)
 
 ## Estratégia de implementação (segura)
 
@@ -60,20 +65,30 @@ Padrão já validado na reorg de abas (construir-novo + swap), porque mover/renu
 
 1. **Backup Drive** datado antes de qualquer escrita.
 2. **Snapshot base:** capturar invariantes atuais (SALDO `D62:BZ62`, totais Receita `D2` e Investimento `D10` por mês, valores de item de receita/invest, Meta invest %, Meta Fatura).
-3. **Construir `Evolução Gastos v2`** (aba nova): escrever a estrutura contígua com fórmulas regeneráveis (Fixas/Cartão/Variável/SALDO/ratios) e **migrar via copyPaste só os DADOS que importam** — os valores mensais de receita (r3–8), investimento (r11–14), Meta invest % e Meta Fatura. A régua de meses (linha 1) é copiada da aba atual.
+3. **Construir `Evolução Gastos v2`** (aba nova):
+   - **copyPaste `A1:BZ16`** da aba atual → v2 (preserva em um passo a régua de meses r1, receitas r2–8 com fórmulas/valores, investimentos r10–14, e Meta invest r15/r16, todos com formato).
+   - **copyPaste `D71:BZ71`** (Meta Fatura, valores editáveis por mês) → v2 `D24:BZ24`.
+   - Escrever as **fórmulas regeneráveis** por coluna nos meses (`D:BZ`): r18 Despesas Fixas, r19 Cartão, r20 Variável (Gastos), r22 SALDO, r25 Limite variável, r27/28/29 ratios. Rótulos col C + metas col B (0,5/0,3/0,2).
 4. **Reconciliar (aborta se quebrar):**
-   - SALDO v2 == SALDO atual, ao centavo, na janela com dados reais.
-   - Receita total e Investimento total por mês == atuais.
+   - SALDO v2 (`D22:BZ22`) == SALDO atual (`D62:BZ62` da aba velha), ao centavo — esperado zero-diff em **todos** os 75 meses (mesma soma total; ver nota abaixo).
+   - Receita total (r2) e Investimento total (r10) por mês == atuais.
+   - Limite variável v2 (r25) == "Objetivo Gasto Variável" atual (r50) por mês — garante que o bot lê o mesmo orçamento.
    - Ratios 50/30/20 somam 100% nos meses com receita.
    - Zero `#REF!`.
-5. **Swap:** deletar `Evolução Gastos` antiga → renomear `v2`→`Evolução Gastos` (Google auto-atualiza refs de outras abas que apontem por nome).
-6. **Reapontar a ponte do Dashboard:** o `SRC` da bridge (Task 3 da reorg de abas) mapeia linhas da Evolução por posição; atualizar pros novos números (Fixas=18, Cartão=19, Variável=20, SALDO=22, Meta Fatura=24, ratios 27–29). Rodar o merge do Dashboard de novo ou um patch da bridge. Reconciliar `Dashboard!B3/B5/B13/B14` == baseline (o bot lê essas).
+5. **Swap:** deletar `Evolução Gastos` antiga → renomear `v2`→`Evolução Gastos` (Google auto-atualiza refs por nome de outras abas).
+6. **Reapontar o Dashboard (duas coisas):**
+   - **Bloco do bot:** `Dashboard!B3` de `INDEX('Evolução Gastos'!50:50;…)` → `INDEX('Evolução Gastos'!25:25;…)`.
+   - **Bridge (linhas 17+ do Dashboard):** `SRC` remapeado pros novos números — Receita=2, Fixos=18, Cartão/Fatura real=19, Variável=20, Investimento=10, SALDO=22, Meta Fatura=24, Fixos%=27, Variável%=28, Poupança%=29. Reconstruir bridge+gráficos (limpar linhas 17+ e Q, recriar).
+   - Reconciliar `Dashboard!B3/B5/B13/B14` == baseline (o bot lê essas).
 7. **Verificação end-to-end:** `readSaldos`/`readBudgets` do bot batem baseline.
+
+**Nota SALDO zero-diff (75 meses):** SALDO novo = `Rec−DespFixas−Cartão−Gastos−Invest` = `Rec−r17−r46−r51−r10`. SALDO antigo = `Rec−r17−r64−r10` com `r64=r46+r51` = idêntico. Logo o SALDO não muda em nenhum mês (inclusive o futuro que projeta recorrentes). A mudança é só de atribuição de bucket, não de valor.
 
 ## Impacto downstream
 
-- **Dashboard:** a bridge (linhas 17+ do Dashboard) reaponta pras novas linhas da Evolução. Gráficos seguem iguais. As células `B3/B5/B13/B14` que o bot lê **não mudam** (dependem de mês corrente, dentro da janela real).
-- **Bot:** lê só `Dashboard!A1:B14` — intocado.
+- **Dashboard bloco bot (A1:B14):** só `B3` referencia a Evolução por linha (`50:50` → `25:25`). `B4/B11` leem a aba `Gastos` direto (não afetados). `B5/B13/B14` derivam de B3/B4 — valor final inalterado após o re-point.
+- **Dashboard bridge (linhas 17+):** reaponta pras novas linhas da Evolução; gráficos recriados iguais.
+- **Bot (`src/`):** lê só `Dashboard!A1:B14` — código intocado; valores lidos inalterados.
 - **Abas-fonte** (`Despesas Fixas`, `Cartão de Crédito`, `Gastos`): não referenciam a Evolução; sem impacto.
 
 ## Fora de escopo
