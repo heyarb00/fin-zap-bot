@@ -3,14 +3,12 @@ import { buildMonthlyOverview } from '../src/monthly';
 
 interface Row {
   data: string;
-  quem: string;
   valor: number;
   descricao: string;
   tipo: string;
 }
 const g = (data: string, valor: number, tipo = 'Semanal'): Row => ({
   data,
-  quem: 'x',
   valor,
   descricao: 'd',
   tipo,

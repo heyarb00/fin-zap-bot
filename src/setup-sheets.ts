@@ -97,13 +97,15 @@ function currentYearMonth(): string {
 
 async function setupGastos(api: sheets_v4.Sheets, sheetId: number): Promise<sheets_v4.Schema$Request[]> {
   await clearSheet(api, SHEET_GASTOS);
-  await writeValues(api, `${SHEET_GASTOS}!A1:D1`, [['Data/Hora', 'Quem', 'Valor', 'Descrição']]);
+  await writeValues(api, `${SHEET_GASTOS}!A1:D1`, [
+    ['Data/Hora', 'Valor', 'Descrição', 'Tipo de Gasto'],
+  ]);
 
   return [
     headerFormatRequest(sheetId, 4),
     {
       repeatCell: {
-        range: { sheetId, startRowIndex: 1, startColumnIndex: 2, endColumnIndex: 3 },
+        range: { sheetId, startRowIndex: 1, startColumnIndex: 1, endColumnIndex: 2 },
         cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern: '#,##0.00' } } },
         fields: 'userEnteredFormat.numberFormat',
       },
@@ -118,14 +120,21 @@ async function setupGastos(api: sheets_v4.Sheets, sheetId: number): Promise<shee
     {
       updateDimensionProperties: {
         range: { sheetId, dimension: 'COLUMNS', startIndex: 1, endIndex: 2 },
-        properties: { pixelSize: 160 },
+        properties: { pixelSize: 110 },
+        fields: 'pixelSize',
+      },
+    },
+    {
+      updateDimensionProperties: {
+        range: { sheetId, dimension: 'COLUMNS', startIndex: 2, endIndex: 3 },
+        properties: { pixelSize: 260 },
         fields: 'pixelSize',
       },
     },
     {
       updateDimensionProperties: {
         range: { sheetId, dimension: 'COLUMNS', startIndex: 3, endIndex: 4 },
-        properties: { pixelSize: 260 },
+        properties: { pixelSize: 120 },
         fields: 'pixelSize',
       },
     },

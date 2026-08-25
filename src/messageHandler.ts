@@ -94,21 +94,6 @@ async function isTargetGroup(msg: Message): Promise<boolean> {
   }
 }
 
-async function getContactName(msg: Message): Promise<string> {
-  // notifyName / author are on the serialized message (no evaluate) and survive
-  // even when getContact's injected path is broken. Never fall back to msg.from
-  // for a group (that is the group id, not the sender).
-  const data = (msg as unknown as { _data?: { notifyName?: string } })._data;
-  const notifyName = data?.notifyName;
-  const author = (msg as unknown as { author?: string }).author;
-  try {
-    const contact = await msg.getContact();
-    return contact.pushname || contact.name || contact.number || notifyName || author || msg.from;
-  } catch {
-    return notifyName || author || msg.from;
-  }
-}
-
 async function handleSaldoCommand(msg: Message): Promise<void> {
   try {
     const saldos = await readSaldos();
@@ -129,11 +114,10 @@ async function handleSaldoCommand(msg: Message): Promise<void> {
 }
 
 async function processExpense(msg: Message, valor: number, descricao: string, tipo: TipoGasto): Promise<void> {
-  const quem = await getContactName(msg);
   const timestamp = formatTimestamp(new Date());
 
   try {
-    await appendExpense({ timestamp, quem, valor, descricao, tipo });
+    await appendExpense({ timestamp, valor, descricao, tipo });
   } catch (err) {
     logger.error({ err }, 'failed to append expense');
     try {

@@ -20,7 +20,6 @@ async function getClient(): Promise<sheets_v4.Sheets> {
 
 export interface ExpenseRow {
   timestamp: string;
-  quem: string;
   valor: number;
   descricao: string;
   tipo: string;
@@ -30,11 +29,11 @@ export async function appendExpense(row: ExpenseRow): Promise<void> {
   const api = await getClient();
   await api.spreadsheets.values.append({
     spreadsheetId: config.spreadsheetId,
-    range: `${config.sheetGastosName}!A:E`,
+    range: `${config.sheetGastosName}!A:D`,
     valueInputOption: 'USER_ENTERED',
     insertDataOption: 'INSERT_ROWS',
     requestBody: {
-      values: [[row.timestamp, row.quem, row.valor, row.descricao, row.tipo]],
+      values: [[row.timestamp, row.valor, row.descricao, row.tipo]],
     },
   });
   logger.info({ row }, 'expense appended');
@@ -97,7 +96,6 @@ async function getGastosSheetId(): Promise<number> {
 export interface StoredExpense {
   // Raw column-A value: a serial number (datetime cell) or a string.
   data: string | number;
-  quem: string;
   valor: number;
   descricao: string;
   tipo: string;
@@ -107,10 +105,9 @@ function toStoredExpense(r: unknown[]): StoredExpense {
   const raw = r[0];
   return {
     data: typeof raw === 'number' ? raw : String(raw ?? ''),
-    quem: String(r[1] ?? ''),
-    valor: typeof r[2] === 'number' ? r[2] : Number(r[2]) || 0,
-    descricao: String(r[3] ?? ''),
-    tipo: String(r[4] ?? ''),
+    valor: typeof r[1] === 'number' ? r[1] : Number(r[1]) || 0,
+    descricao: String(r[2] ?? ''),
+    tipo: String(r[3] ?? ''),
   };
 }
 
@@ -119,7 +116,7 @@ export async function listExpenses(): Promise<StoredExpense[]> {
   const api = await getClient();
   const res = await api.spreadsheets.values.get({
     spreadsheetId: config.spreadsheetId,
-    range: `${config.sheetGastosName}!A2:E`,
+    range: `${config.sheetGastosName}!A2:D`,
     valueRenderOption: 'UNFORMATTED_VALUE',
   });
   const rows = res.data.values ?? [];
@@ -131,7 +128,7 @@ export async function undoLastExpense(): Promise<StoredExpense | null> {
   const api = await getClient();
   const res = await api.spreadsheets.values.get({
     spreadsheetId: config.spreadsheetId,
-    range: `${config.sheetGastosName}!A:E`,
+    range: `${config.sheetGastosName}!A:D`,
     valueRenderOption: 'UNFORMATTED_VALUE',
   });
   const rows = res.data.values ?? [];
