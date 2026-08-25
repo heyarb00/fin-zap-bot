@@ -9,8 +9,7 @@
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "test": "vitest run",
-    "setup-sheets": "ts-node src/setup-sheets.ts",
-    "migrate:drop-quem": "ts-node src/migrate-drop-quem.ts"
+    "setup-sheets": "ts-node src/setup-sheets.ts"
   },
   "dependencies": {
     "@googleapis/sheets": "^9.0.0",
