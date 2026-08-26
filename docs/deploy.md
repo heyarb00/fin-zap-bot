@@ -12,8 +12,36 @@ git pull && docker compose up -d --build
 não remove arquivos untracked/ignored, então eles sobrevivem — mas **confirme com
 `git status` antes** de qualquer reset.
 
-> As etapas abaixo rodam **no Pi** e usam a senha SSH — quem executa é você.
 > Pi: `pi@192.168.1.180` (ou `matilhahub.local`). Pasta: `~/whatsapp-finance-bot`.
+
+---
+
+## Acesso SSH ao Pi (key auth — configurado 2026-08-26)
+
+O laptop tem **auth SSH por chave** no Pi: a chave pública `~/.ssh/id_ed25519.pub`
+está autorizada em `~/.ssh/authorized_keys` do Pi. Ou seja, do laptop:
+
+```bash
+ssh pi@matilhahub.local "echo ok"   # passwordless (fallback: pi@192.168.1.180)
+```
+
+conecta **sem senha**. Consequência prática: um agente rodando no laptop consegue
+executar o deploy inteiro (rsync/`git pull` + `docker compose up -d --build` + ver
+logs) de ponta a ponta, sem passo manual de senha. Não há mais bloqueio de
+"não posso digitar a senha" — nenhuma senha é necessária.
+
+Atalho opcional em `~/.ssh/config` (deixa o alvo virar só `pi`):
+
+```
+Host pi
+  HostName matilhahub.local
+  User pi
+  IdentityFile ~/.ssh/id_ed25519
+```
+
+> A senha do Pi segue existindo como fallback (não foi desabilitada). Endurecer
+> (desabilitar `PasswordAuthentication` no `sshd_config`) é opcional e tem risco de
+> lockout — não obrigatório.
 
 ---
 
