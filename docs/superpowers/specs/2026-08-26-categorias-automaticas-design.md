@@ -24,13 +24,19 @@ Função pura, testável:
 
 ```
 normalize(s) = s.toLowerCase, remove acentos (NFD), colapsa espaços
+CATEGORIAS = [Alimentação, Transporte, Saúde, Pet, Lazer & Esporte, Beleza, Casa, Presentes, Outros]
 categorize(descricao, rules): string
   d = normalize(descricao)
-  para cada rule em rules (na ordem):        // first-match-wins
+  # 1) override explícito: descrição == nome de categoria (match EXATO)
+  para cada cat em CATEGORIAS: se normalize(cat) == d: retorna cat
+  # 2) regras de palavra-chave (substring, first-match-wins)
+  para cada rule em rules (na ordem):
     se normalize(rule.keyword) está contido em d: retorna rule.categoria
+  # 3) fallback
   retorna "Outros"
 ```
 
+- **Override explícito (match exato):** se a descrição normalizada for **igual** ao nome de uma categoria (ex: `"Alimentação"`, `"casa"`), usa essa categoria direto — escotilha de escape pro usuário forçar a categoria. É **igualdade exata** (não substring) de propósito: `"casa do pastel"` NÃO vira Casa (cai na regra `pastel`→Alimentação); só `"Casa"` sozinho vira Casa.
 - **Match = substring** da palavra-chave normalizada na descrição normalizada. Simples e robusto pro vocabulário curto.
 - **Ordem importa:** a primeira regra que casa vence. Termos mais específicos/prioritários ficam **no topo** do dicionário (ex: `jantar de amigos`→Lazer antes de `jantar`→Alimentação; `uber`→Transporte antes de `almoço`). O usuário controla prioridade reordenando linhas na aba.
 - **Fallback:** nada casou → `Outros`.
@@ -76,10 +82,13 @@ Layout numa aba só:
 
 Unit em `src/categorize.ts` (vitest):
 - normaliza acento/caixa (`"Almoço"`==`"almoco"`).
+- **override exato:** `"Alimentação"`→Alimentação, `"casa"`→Casa (mesmo com dicionário vazio).
+- override exato é igualdade, não substring: `"casa do pastel"`→Alimentação (via `pastel`), não Casa.
+- override exato vence keyword: descrição `"Transporte"` → Transporte mesmo se algum keyword casaria.
 - first-match-wins respeita ordem (regra específica antes da genérica).
 - substring casa (`"combustivel opala"`→Transporte).
 - fallback `Outros` pra descrição desconhecida.
-- dicionário vazio → tudo `Outros`.
+- dicionário vazio → tudo `Outros` (exceto os nomes de categoria via override).
 
 ## Fora de escopo
 
