@@ -6,7 +6,7 @@
 
 **Architecture:** Classificador puro em TS (`categorize.ts`, TDD). Dicionário vive na aba `Categorias` (editável ao vivo; seed em código pra provisionar). Bot classifica no lançamento e grava col E. Resumo por categoria = fórmulas SUMIFS na aba Categorias + pizza; o comando `!categorias` lê esse resumo. Scripts one-off criam a aba + fazem backfill na planilha viva.
 
-**Tech Stack:** TypeScript, vitest, `@googleapis/sheets`. Bot no Pi (deploy rsync+rebuild). Locale pt-BR.
+**Tech Stack:** TypeScript, vitest, `@googleapis/sheets`. Bot no Pi (deploy `git pull` + `docker compose up -d --build`, SSH por chave). Locale pt-BR.
 
 **Spec:** [../specs/2026-08-26-categorias-automaticas-design.md](../specs/2026-08-26-categorias-automaticas-design.md)
 
@@ -559,12 +559,12 @@ git commit -m "feat(categorias): backfill da col E nas linhas existentes (idempo
 
 - [ ] **Step 1: Atualizar memórias**
 
-- Nova nota: feature de categorias. Classificador `src/categorize.ts` (override exato + substring first-match + fallback Outros); dicionário na aba `Categorias` (A:B, editável ao vivo; seed em `SEED_RULES`); col E na Gastos preenchida no append; resumo SUMIFS + pizza na aba Categorias; comando `!categorias`. Deploy no Pi pendente (rsync+rebuild).
+- Nova nota: feature de categorias. Classificador `src/categorize.ts` (override exato + substring first-match + fallback Outros); dicionário na aba `Categorias` (A:B, editável ao vivo; seed em `SEED_RULES`); col E na Gastos preenchida no append; resumo SUMIFS + pizza na aba Categorias; comando `!categorias`. Deploy no Pi pendente (`git pull` + `docker compose up -d --build`).
 - Atualizar índice `MEMORY.md`.
 
 - [ ] **Step 2: Deploy no Pi (usuário executa)**
 
-O código novo (categorize + wiring) só entra em produção com deploy: Pi `docker compose down` → laptop rsync → Pi `docker compose up -d --build`. As mudanças de planilha (aba Categorias, col E, backfill) já estão vivas via Tasks 4-5. Documentar; o usuário roda (precisa senha SSH do Pi).
+O código novo (categorize + wiring) só entra em produção com deploy: `git push` (laptop, main) → no Pi `git pull` + `docker compose up -d --build`. SSH por chave (passwordless, `pi@pi5.local`), então um agente consegue rodar o deploy inteiro. As mudanças de planilha (aba Categorias, col E, backfill) já estão vivas via Tasks 4-5.
 
 - [ ] **Step 3: Commit final**
 

@@ -143,16 +143,21 @@ Baixo (aba nova). Cuidado só com orientação linha/coluna das séries.
 
 ---
 
-## Item 6 — Deploy do Pi via git (hoje é rsync manual)
+## Item 6 — Deploy do Pi via git ✅ CONCLUÍDO
 
-### Estado atual
-`~/whatsapp-finance-bot` no Pi (`pi@pi5.local`) **não é repo
-git** — deploy é `rsync` do laptop + `docker compose down/up -d --build`. Container
+> **Aplicado.** `~/whatsapp-finance-bot` no Pi agora é um **checkout git** de
+> `git@github.com:heyarb00/fin-zap-bot.git` e o deploy é `git pull && docker compose
+> up -d --build`. SSH por **chave** (passwordless). Detalhes operacionais atuais em
+> [deploy.md](deploy.md). O texto abaixo é o registro histórico do plano.
+
+### Estado (antes da migração — histórico)
+`~/whatsapp-finance-bot` no Pi (`pi@pi5.local`) **não era repo
+git** — deploy era `rsync` do laptop + `docker compose down/up -d --build`. Container
 `fin-zap-bot`, imagem buildada local pelo compose. `.env`/`credentials.json` vivem só no
-Pi (gitignored). Pi usa **auth SSH por senha**.
+Pi (gitignored). Pi usava **auth SSH por senha**.
 
-### Alvo
-Pasta do Pi vira checkout git de `git@github.com:heyarb00/fin-zap-bot.git` → deploy futuro
+### Alvo (atingido)
+Pasta do Pi vira checkout git de `git@github.com:heyarb00/fin-zap-bot.git` → deploy
 = `git pull && docker compose up -d --build`.
 
 ### Abordagem (rodar no Pi; precisa da senha SSH — usuário faz)

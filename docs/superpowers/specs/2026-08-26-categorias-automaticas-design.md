@@ -99,7 +99,7 @@ Unit em `src/categorize.ts` (vitest):
 
 ## Deploy
 
-Mudança de código → deploy no Pi por rsync + `docker compose up -d --build` (padrão documentado). A aba `Categorias`, a col E e o backfill são aplicados na planilha viva pelos scripts one-off (rodam do laptop, têm creds).
+Mudança de código → deploy no Pi por `git pull` + `docker compose up -d --build` (SSH por chave, passwordless — ver docs/deploy.md). A aba `Categorias`, a col E e o backfill são aplicados na planilha viva pelos scripts one-off (rodam do laptop, têm creds).
 
 ## Dicionário semente (a partir do histórico real)
 

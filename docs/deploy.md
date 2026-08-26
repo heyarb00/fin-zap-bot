@@ -1,11 +1,17 @@
 # Deploy do fin-zap-bot no Raspberry Pi
 
-Fluxo novo: a pasta do bot no Pi vira um **checkout git** do repositório privado
-`git@github.com:heyarb00/fin-zap-bot.git`. Deploy passa a ser:
+A pasta do bot no Pi **é um checkout git** do repositório privado
+`git@github.com:heyarb00/fin-zap-bot.git`. Deploy é:
 
 ```bash
 git pull && docker compose up -d --build
 ```
+
+> **Método atual = `git pull`** (a migração pra repo git no Pi já foi aplicada; o
+> antigo deploy por rsync está aposentado). O passo-a-passo diário está na seção
+> [Deploy no dia a dia](#deploy-no-dia-a-dia-depois-da-migração). A seção "Migração
+> única" abaixo é registro histórico de como a pasta virou repo — não precisa rodar
+> de novo.
 
 `.env`, `credentials.json` e a sessão do WhatsApp (`.wwebjs_auth/`, `.wwebjs_cache/`)
 **não** são versionados (estão no `.gitignore`) e vivem só no Pi. `git reset --hard`
@@ -26,7 +32,7 @@ ssh pi@pi5.local "echo ok"   # passwordless
 ```
 
 conecta **sem senha**. Consequência prática: um agente rodando no laptop consegue
-executar o deploy inteiro (rsync/`git pull` + `docker compose up -d --build` + ver
+executar o deploy inteiro (`git pull` + `docker compose up -d --build` + ver
 logs) de ponta a ponta, sem passo manual de senha. Não há mais bloqueio de
 "não posso digitar a senha" — nenhuma senha é necessária.
 
@@ -45,7 +51,7 @@ Host pi
 
 ---
 
-## Migração única (transformar a pasta em repo git)
+## Migração única (transformar a pasta em repo git) — ✅ JÁ APLICADA (histórico)
 
 ### 1. Entrar no Pi e parar o bot
 
