@@ -12,7 +12,7 @@ git pull && docker compose up -d --build
 não remove arquivos untracked/ignored, então eles sobrevivem — mas **confirme com
 `git status` antes** de qualquer reset.
 
-> Pi: `pi@192.168.1.180` (ou `matilhahub.local`). Pasta: `~/whatsapp-finance-bot`.
+> Pi: `pi@pi5.local`. Pasta: `~/whatsapp-finance-bot`.
 
 ---
 
@@ -22,7 +22,7 @@ O laptop tem **auth SSH por chave** no Pi: a chave pública `~/.ssh/id_ed25519.p
 está autorizada em `~/.ssh/authorized_keys` do Pi. Ou seja, do laptop:
 
 ```bash
-ssh pi@matilhahub.local "echo ok"   # passwordless (fallback: pi@192.168.1.180)
+ssh pi@pi5.local "echo ok"   # passwordless
 ```
 
 conecta **sem senha**. Consequência prática: um agente rodando no laptop consegue
@@ -34,7 +34,7 @@ Atalho opcional em `~/.ssh/config` (deixa o alvo virar só `pi`):
 
 ```
 Host pi
-  HostName matilhahub.local
+  HostName pi5.local
   User pi
   IdentityFile ~/.ssh/id_ed25519
 ```
@@ -50,7 +50,7 @@ Host pi
 ### 1. Entrar no Pi e parar o bot
 
 ```bash
-ssh pi@192.168.1.180
+ssh pi@pi5.local
 cd ~/whatsapp-finance-bot
 docker compose down
 ```
@@ -156,7 +156,7 @@ Mande um gasto de teste no grupo do WhatsApp e confirme que grava na planilha.
 ## Deploy no dia a dia (depois da migração)
 
 ```bash
-ssh pi@192.168.1.180
+ssh pi@pi5.local
 cd ~/whatsapp-finance-bot
 git pull
 docker compose up -d --build

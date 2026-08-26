@@ -25,7 +25,7 @@ Você é um Engenheiro de Software Full-Stack Sênior e especialista em DevOps. 
 As credenciais abaixo devem ser usadas para conectar ao Pi, copiar os arquivos e executar o deploy:
 
 ```
-Host: 192.168.1.180
+Host: pi5.local
 User: pi
 Password: <SENHA_SSH>   # ver gerenciador de senhas / não commitar credencial real
 ```

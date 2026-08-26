@@ -146,7 +146,7 @@ Baixo (aba nova). Cuidado só com orientação linha/coluna das séries.
 ## Item 6 — Deploy do Pi via git (hoje é rsync manual)
 
 ### Estado atual
-`~/whatsapp-finance-bot` no Pi (`pi@192.168.1.180` / `matilhahub.local`) **não é repo
+`~/whatsapp-finance-bot` no Pi (`pi@pi5.local`) **não é repo
 git** — deploy é `rsync` do laptop + `docker compose down/up -d --build`. Container
 `fin-zap-bot`, imagem buildada local pelo compose. `.env`/`credentials.json` vivem só no
 Pi (gitignored). Pi usa **auth SSH por senha**.
