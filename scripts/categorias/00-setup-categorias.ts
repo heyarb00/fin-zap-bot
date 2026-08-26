@@ -4,7 +4,8 @@ import { SEED_RULES, CATEGORIAS } from '../../src/categorize';
 
 const GASTOS = 'Gastos';
 const CAT = 'Categorias';
-const NAVY = { red: 0x08 / 255, green: 0x21 / 255, blue: 0x4f / 255 };
+// Mesma navy do header padrão (setup-sheets headerFormatRequest)
+const NAVY = { red: 0.1764706, green: 0.24705882, blue: 0.4 };
 const WHITE = { red: 1, green: 1, blue: 1 };
 
 async function main() {
