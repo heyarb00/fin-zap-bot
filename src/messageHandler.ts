@@ -9,9 +9,12 @@ import {
   readBudgets,
   listExpenses,
   undoLastExpense,
+  getCategoriaRules,
+  readCategoriaSummary,
   Saldos,
   StoredExpense,
 } from './googleSheets';
+import { categorize } from './categorize';
 import { detectLimitAlerts } from './alerts';
 import { isInCurrentWeek, cellDateLabel } from './week';
 import { buildMonthlyOverview, MonthlyOverview } from './monthly';
@@ -116,8 +119,15 @@ async function handleSaldoCommand(msg: Message): Promise<void> {
 async function processExpense(msg: Message, valor: number, descricao: string, tipo: TipoGasto): Promise<void> {
   const timestamp = formatTimestamp(new Date());
 
+  let categoria = 'Outros';
   try {
-    await appendExpense({ timestamp, valor, descricao, tipo });
+    categoria = categorize(descricao, await getCategoriaRules());
+  } catch (err) {
+    logger.error({ err }, 'categorize failed; using Outros');
+  }
+
+  try {
+    await appendExpense({ timestamp, valor, descricao, tipo, categoria });
   } catch (err) {
     logger.error({ err }, 'failed to append expense');
     try {
@@ -165,6 +175,7 @@ const HELP_TEXT = [
   '• `!saldo`    → saldos restantes (semana e mês)',
   '• `!extrato`  → gastos desta semana',
   '• `!mes`      → resumo do mês, semana a semana',
+  '• `!categorias` → gastos do mês por categoria',
   '• `!desfazer` → apaga o último gasto lançado',
   '• `!help`     → esta ajuda',
 ].join('\n');
@@ -273,6 +284,32 @@ async function handleMesCommand(msg: Message): Promise<void> {
   }
 }
 
+async function handleCategoriasCommand(msg: Message): Promise<void> {
+  try {
+    const summary = await readCategoriaSummary();
+    const rows = summary.filter((r) => r.mesAtual > 0).sort((a, b) => b.mesAtual - a.mesAtual);
+    if (rows.length === 0) {
+      await msg.reply('📊 Nenhum gasto categorizado neste mês.');
+      return;
+    }
+    const total = rows.reduce((s, r) => s + r.mesAtual, 0);
+    const lines = [
+      '📊 Gastos do mês por categoria:',
+      ...rows.map((r) => `• ${r.categoria}: R$ ${r.mesAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`),
+      '',
+      `Total: R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    ];
+    await msg.reply(lines.join('\n'));
+  } catch (err) {
+    logger.error({ err }, 'categorias command failed');
+    try {
+      await msg.reply('⚠️ Não consegui buscar os gastos por categoria agora.');
+    } catch (replyErr) {
+      logger.error({ err: replyErr }, 'failed to send categorias error reply');
+    }
+  }
+}
+
 async function handleUndoCommand(msg: Message): Promise<void> {
   try {
     const removed = await undoLastExpense();
@@ -318,6 +355,10 @@ export async function handleMessage(msg: Message): Promise<void> {
     }
     if (cmd === '!mes' || cmd === '!mensal') {
       await queue.add(() => handleMesCommand(msg));
+      return;
+    }
+    if (cmd === '!categorias' || cmd === '!categoria') {
+      await queue.add(() => handleCategoriasCommand(msg));
       return;
     }
     if (cmd === '!desfazer' || cmd === '!undo') {
