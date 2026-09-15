@@ -190,6 +190,8 @@ const HELP_TEXT = [
   '• `!categorias` → gastos do mês por categoria',
   '• `!desfazer` → apaga o último gasto lançado',
   '• `!help`     → esta ajuda',
+  '',
+  '• 📎 Fechamento: envie o CSV da fatura (app XP) aqui → reconcilia e registra na aba Faturas.',
 ].join('\n');
 
 async function handleHelpCommand(msg: Message): Promise<void> {
