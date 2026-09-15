@@ -5,7 +5,6 @@ import { logger } from './logger';
 import { parseExpense, TipoGasto } from './parser';
 import {
   appendExpense,
-  readSaldos,
   readBudgets,
   listExpenses,
   undoLastExpense,
@@ -17,7 +16,7 @@ import {
 import { categorize } from './categorize';
 import { detectLimitAlerts } from './alerts';
 import { isInCurrentWeek, cellDateLabel } from './week';
-import { buildMonthlyOverview, MonthlyOverview } from './monthly';
+import { buildMonthlyOverview, saldosFromOverview, MonthlyOverview } from './monthly';
 
 const queue = new PQueue({ concurrency: 1 });
 
@@ -99,7 +98,11 @@ async function isTargetGroup(msg: Message): Promise<boolean> {
 
 async function handleSaldoCommand(msg: Message): Promise<void> {
   try {
-    const saldos = await readSaldos();
+    const [gastos, budgets] = await Promise.all([listExpenses(), readBudgets()]);
+    const overview = buildMonthlyOverview(new Date(), budgets.limiteMensal, gastos);
+    const saldos: Saldos = overview
+      ? saldosFromOverview(overview)
+      : { semanal: null, mensal: null };
     const reply = [
       '📊 Saldos atuais:',
       formatSaldoLine('Semana', '📅', saldos.semanal),
@@ -141,18 +144,25 @@ async function processExpense(msg: Message, valor: number, descricao: string, ti
   let saldos: Saldos | null = null;
   let alerts: string[] = [];
   try {
-    const [s, budgets] = await Promise.all([readSaldos(), readBudgets()]);
-    saldos = s;
-    alerts = detectLimitAlerts({
-      valor,
-      tipo,
-      saldoMensal: saldos.mensal,
-      saldoSemanal: saldos.semanal,
-      limiteMensal: budgets.limiteMensal,
-      orcamentoSemanal: budgets.orcamentoSemanal,
-    });
+    // Same engine as !mes: build the overview from raw Gastos (already includes
+    // this expense, appended above) + the monthly limit, then derive saldos and
+    // alerts from it. Keeps !saldo, the new-expense reply and !mes in agreement.
+    const [gastos, budgets] = await Promise.all([listExpenses(), readBudgets()]);
+    const overview = buildMonthlyOverview(new Date(), budgets.limiteMensal, gastos);
+    if (overview) {
+      const s = saldosFromOverview(overview);
+      saldos = s;
+      alerts = detectLimitAlerts({
+        valor,
+        tipo,
+        saldoMensal: s.mensal,
+        saldoSemanal: s.semanal,
+        limiteMensal: overview.limite,
+        orcamentoSemanal: overview.orcamentoSemana,
+      });
+    }
   } catch (err) {
-    logger.error({ err }, 'failed to read saldos/budgets');
+    logger.error({ err }, 'failed to build overview/saldos');
   }
 
   let reply = saldos ? buildSuccessReply(valor, descricao, tipo, saldos) : buildFallbackReply(valor, descricao, tipo);
@@ -261,7 +271,8 @@ function formatMonthly(o: MonthlyOverview): string {
 
   const saldo = o.saldoMes >= 0 ? money(o.saldoMes) : `⚠️ −${money(o.saldoMes)}`;
   lines.push('');
-  lines.push(`Fixos (Mensal): ${money(o.totalMensal)} · Saldo do mês: ${saldo}`);
+  const diluido = o.totalMensalDiluido > 0 ? `Diluído no mês (Mensal): ${money(o.totalMensalDiluido)} · ` : '';
+  lines.push(`${diluido}Saldo do mês: ${saldo}`);
   return lines.join('\n');
 }
 
