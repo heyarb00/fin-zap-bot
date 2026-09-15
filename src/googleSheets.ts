@@ -41,6 +41,22 @@ export async function appendExpense(row: ExpenseRow): Promise<void> {
   logger.info({ row }, 'expense appended');
 }
 
+const FATURAS_SHEET = 'Faturas';
+
+// Registra um fechamento na aba Faturas (histórico de calibração).
+// row = [carimbo, YYYY-MM, gasto, fixo, variavel, diaADia, grandes, pagamentos]
+export async function appendFaturaRow(row: (string | number)[]): Promise<void> {
+  const api = await getClient();
+  await api.spreadsheets.values.append({
+    spreadsheetId: config.spreadsheetId,
+    range: `${FATURAS_SHEET}!A:H`,
+    valueInputOption: 'USER_ENTERED',
+    insertDataOption: 'INSERT_ROWS',
+    requestBody: { values: [row] },
+  });
+  logger.info({ row }, 'fatura row appended');
+}
+
 export interface Saldos {
   semanal: number | null;
   mensal: number | null;

@@ -5,6 +5,7 @@ import { logger } from './logger';
 import { parseExpense, TipoGasto } from './parser';
 import {
   appendExpense,
+  appendFaturaRow,
   readBudgets,
   listExpenses,
   undoLastExpense,
@@ -17,6 +18,7 @@ import { categorize } from './categorize';
 import { detectLimitAlerts } from './alerts';
 import { isInCurrentWeek, cellDateLabel } from './week';
 import { buildMonthlyOverview, saldosFromOverview, MonthlyOverview } from './monthly';
+import { runFechamento } from './fechamento';
 
 const queue = new PQueue({ concurrency: 1 });
 
@@ -321,6 +323,39 @@ async function handleCategoriasCommand(msg: Message): Promise<void> {
   }
 }
 
+// Recebe o CSV/OFX da fatura XP como anexo no grupo, reconcilia e responde o
+// relatório de fechamento, registrando na aba Faturas. Ignora anexos não-CSV.
+async function handleFechamentoDocument(msg: Message): Promise<void> {
+  let media: { data: string; mimetype: string; filename?: string } | undefined;
+  try {
+    media = (await msg.downloadMedia()) as typeof media;
+  } catch (err) {
+    logger.error({ err }, 'failed to download media');
+    return;
+  }
+  if (!media || !media.data) return;
+
+  const name = (media.filename ?? '').toLowerCase();
+  const mime = (media.mimetype ?? '').toLowerCase();
+  const looksCsv = name.endsWith('.csv') || name.endsWith('.ofx') || mime.includes('csv') || mime.includes('text');
+  if (!looksCsv) return;
+
+  try {
+    const csv = Buffer.from(media.data, 'base64').toString('utf8');
+    const [gastos, rules] = await Promise.all([listExpenses(), getCategoriaRules()]);
+    const out = runFechamento(csv, { gastos, meta: config.metaFatura, rules });
+    await appendFaturaRow(out.faturaRow);
+    await msg.reply(out.result.relatorio);
+  } catch (err) {
+    logger.error({ err }, 'fechamento failed');
+    try {
+      await msg.reply('⚠️ Não consegui processar a fatura. Confere se é o CSV do app XP.');
+    } catch (replyErr) {
+      logger.error({ err: replyErr }, 'failed to send fechamento error reply');
+    }
+  }
+}
+
 async function handleUndoCommand(msg: Message): Promise<void> {
   try {
     const removed = await undoLastExpense();
@@ -345,6 +380,12 @@ async function handleUndoCommand(msg: Message): Promise<void> {
 export async function handleMessage(msg: Message): Promise<void> {
   try {
     if (!(await isTargetGroup(msg))) return;
+
+    // Anexo (CSV da fatura) -> fluxo de fechamento.
+    if ((msg as unknown as { hasMedia?: boolean }).hasMedia) {
+      await queue.add(() => handleFechamentoDocument(msg));
+      return;
+    }
 
     const body = (msg.body ?? '').trim();
     if (!body) return;

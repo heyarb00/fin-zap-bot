@@ -10,6 +10,7 @@ interface Config {
   cellSaldoMensal: string;
   cellLimiteMensal: string;
   cellOrcamentoSemanal: string;
+  metaFatura: number;
   nodeEnv: string;
   credentialsPath: string;
 }
@@ -51,6 +52,7 @@ function loadConfig(): Config {
     cellSaldoMensal: process.env.CELL_SALDO_MENSAL!,
     cellLimiteMensal: process.env.CELL_LIMITE_MENSAL ?? 'Dashboard!B3',
     cellOrcamentoSemanal: process.env.CELL_ORCAMENTO_SEMANAL ?? 'Dashboard!B13',
+    metaFatura: Number(process.env.FATURA_META ?? 16000),
     nodeEnv: process.env.NODE_ENV!,
     credentialsPath: path.resolve(credentialsPath),
   };
