@@ -11,6 +11,7 @@ interface Config {
   cellLimiteMensal: string;
   cellOrcamentoSemanal: string;
   metaFatura: number;
+  driveFolderId: string;
   nodeEnv: string;
   credentialsPath: string;
 }
@@ -53,6 +54,7 @@ function loadConfig(): Config {
     cellLimiteMensal: process.env.CELL_LIMITE_MENSAL ?? 'Dashboard!B3',
     cellOrcamentoSemanal: process.env.CELL_ORCAMENTO_SEMANAL ?? 'Dashboard!B13',
     metaFatura: Number(process.env.FATURA_META ?? 16000),
+    driveFolderId: (process.env.DRIVE_FOLDER_ID ?? '').trim(),
     nodeEnv: process.env.NODE_ENV!,
     credentialsPath: path.resolve(credentialsPath),
   };
