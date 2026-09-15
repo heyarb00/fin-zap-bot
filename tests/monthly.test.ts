@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildMonthlyOverview } from '../src/monthly';
+import { buildMonthlyOverview, saldosFromOverview } from '../src/monthly';
 
 interface Row {
   data: string;
@@ -95,6 +95,15 @@ describe('buildMonthlyOverview', () => {
     // week1 past? 01-04 is before 15 -> past, budget 1000, spent 0 -> net 1000
     expect(o.semanas[0].value).toBeCloseTo(1000, 5);
     expect(o.saldoMes).toBeCloseTo(5000, 5);
+  });
+
+  it('saldosFromOverview usa o mesmo overview do !mes (semanal=saldoSemanaAtual, mensal=saldoMes)', () => {
+    const gastos = [g('14/07/2026 10:00:00', 200)]; // week3 current
+    const o = buildMonthlyOverview(now, 4000, gastos)!;
+    const s = saldosFromOverview(o);
+    expect(s.semanal).toBeCloseTo(o.saldoSemanaAtual, 5);
+    expect(s.mensal).toBeCloseTo(o.saldoMes, 5);
+    expect(s.mensal).toBeCloseTo(3800, 5); // 4000 - 200
   });
 
   it('ignores expenses from other months', () => {

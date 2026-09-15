@@ -17,12 +17,19 @@ export interface MonthlyOverview {
   limite: number;
   semanas: WeekLine[];
   totalMensalDiluido: number; // gasto 'Mensal' do mês, diluído sobre as semanas restantes
+  orcamentoSemana: number; // orçamento dinâmico da semana corrente (antes de descontar o gasto dela)
   saldoSemanaAtual: number; // saldo da semana corrente (mesmo valor que o bot responde)
   saldoMes: number;
 }
 
 function ymdOf(dt: Date): number {
   return dt.getUTCFullYear() * 10000 + (dt.getUTCMonth() + 1) * 100 + dt.getUTCDate();
+}
+
+// Single source of truth for the saldos the bot shows on !saldo and after a new
+// expense. Derived from the same overview !mes uses, so all three always agree.
+export function saldosFromOverview(o: MonthlyOverview): { semanal: number; mensal: number } {
+  return { semanal: o.saldoSemanaAtual, mensal: o.saldoMes };
 }
 
 // Dynamic weekly budgets over the current month (Sun-Sat weeks), matching the
@@ -101,6 +108,7 @@ export function buildMonthlyOverview(
   let remaining = limite;
   let remainingAfterCurrent = limite;
   let saldoSemanaAtual = 0;
+  let orcamentoSemana = 0;
   const lines: WeekLine[] = weeks.map((w, i) => {
     if (w.status === 'current') remaining -= totalMensalDiluido;
     const budget = remaining / (n - i);
@@ -114,6 +122,7 @@ export function buildMonthlyOverview(
       remaining -= w.spent;
       remainingAfterCurrent = remaining;
       saldoSemanaAtual = value;
+      orcamentoSemana = budget;
       return { index: i + 1, startDay: w.startDay, endDay: w.endDay, status: w.status, value };
     }
     // future: filled in below
@@ -132,6 +141,7 @@ export function buildMonthlyOverview(
     limite,
     semanas: lines,
     totalMensalDiluido,
+    orcamentoSemana,
     saldoSemanaAtual,
     saldoMes: limite - totalMes,
   };
