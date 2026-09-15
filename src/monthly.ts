@@ -16,7 +16,8 @@ export interface MonthlyOverview {
   mes: number; // 1-12
   limite: number;
   semanas: WeekLine[];
-  totalMensal: number;
+  totalMensalDiluido: number; // gasto 'Mensal' do mês, diluído sobre as semanas restantes
+  saldoSemanaAtual: number; // saldo da semana corrente (mesmo valor que o bot responde)
   saldoMes: number;
 }
 
@@ -74,27 +75,34 @@ export function buildMonthlyOverview(
   }
 
   // Aggregate spend: Semanal per week (clipped to month), plus month totals.
-  let totalMensal = 0;
+  // 'Mensal' is a smoothing tag: it counts toward the month but is diluted over
+  // the weeks still to come (subtracted at the current-week boundary), so a lumpy
+  // one-off never blows a single week's budget.
+  let totalMensalDiluido = 0;
   let totalMes = 0;
   for (const gExp of gastos) {
     const gy = cellToYmd(gExp.data);
     if (gy === null || gy < monthStartYmd || gy > monthEndYmd) continue;
     totalMes += gExp.valor;
     if (gExp.tipo === 'Mensal') {
-      totalMensal += gExp.valor;
+      totalMensalDiluido += gExp.valor;
       continue;
     }
     const wk = weeks.find((w) => gy >= w.startYmd && gy <= w.endYmd);
     if (wk) wk.spent += gExp.valor;
   }
 
-  const pool = limite - totalMensal;
   const n = weeks.length;
 
   // Walk past + current to consume the pool; capture what remains for forecasting.
-  let remaining = pool;
-  let remainingAfterCurrent = pool;
+  // The pool starts at the full limit; the diluted 'Mensal' total is removed only
+  // when we reach the current week, so it lands on current+future weeks (never on
+  // weeks already gone) and is charged exactly once.
+  let remaining = limite;
+  let remainingAfterCurrent = limite;
+  let saldoSemanaAtual = 0;
   const lines: WeekLine[] = weeks.map((w, i) => {
+    if (w.status === 'current') remaining -= totalMensalDiluido;
     const budget = remaining / (n - i);
     if (w.status === 'past') {
       const value = budget - w.spent;
@@ -105,6 +113,7 @@ export function buildMonthlyOverview(
       const value = budget - w.spent;
       remaining -= w.spent;
       remainingAfterCurrent = remaining;
+      saldoSemanaAtual = value;
       return { index: i + 1, startDay: w.startDay, endDay: w.endDay, status: w.status, value };
     }
     // future: filled in below
@@ -122,7 +131,8 @@ export function buildMonthlyOverview(
     mes: m,
     limite,
     semanas: lines,
-    totalMensal,
+    totalMensalDiluido,
+    saldoSemanaAtual,
     saldoMes: limite - totalMes,
   };
 }

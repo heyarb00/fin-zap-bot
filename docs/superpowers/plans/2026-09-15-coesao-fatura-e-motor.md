@@ -70,73 +70,62 @@
 
 ## Phase 1 — Motor único de orçamento (corrige `!mes` ≠ nova-despesa)
 
-**Modelo canônico (fonte única, usado por todos os comandos — espelha o bloco vivo do Dashboard):**
-- `limiteMensal` = `Dashboard!B3` (= Meta − Cartão modelado). Lido da planilha.
-- `variavelMes` = soma de TODOS os Gastos do mês corrente (inclui os `Mensal`). [= `B4`]
-- `saldoMes` = `limiteMensal − variavelMes`. [= `B5`]
-- Semanas Dom–Sáb que tocam o mês. `remainingWeeks` = nº de semanas com status `current`+`future`. [= `B12`]
-- `weeklyDynamic` = `saldoMes / remainingWeeks`. [= `B13`]
-- `gastoSemanaAtual` = soma dos Gastos **não-`Mensal`** da semana atual. [= `B11`]
-- `saldoSemanaAtual` = `weeklyDynamic − gastoSemanaAtual`. [= `B14`]
-- **Diluição do `Mensal`:** entra em `variavelMes`→`saldoMes` (logo reduz `weeklyDynamic` sobre as semanas restantes = diluído), mas é EXCLUÍDO de `gastoSemanaAtual` (não dá o baque numa só semana).
-- Breakdown por semana (só pro `!mes`): net = orçamento da semana − gasto não-`Mensal` daquela semana. Uma nota de rodapé lista o total `Mensal` diluído do mês.
+**Modelo canônico — o MOTOR TS é a fonte da verdade (número correto, sem dupla subtração). O Dashboard é que se ajusta a ele na Phase 2.**
 
-### Task 1.1: Alinhar `buildMonthlyOverview` ao modelo do Dashboard, preservando diluição do `Mensal`
+⚠️ A planilha atual (`B14 = B13 − B11`, com `B13 = B5/B12` e `B5 = B3 − B4`) subtrai o gasto da semana atual DUAS vezes: uma dentro de `B4/B5`, outra como `B11`. O motor TS já faz certo. NÃO copiar a fórmula da planilha.
+
+Algoritmo (mantém a caminhada sequencial atual de `src/monthly.ts`, com diluição do `Mensal` pra frente):
+- `limiteMensal` = `Dashboard!B3` (= Meta − Cartão modelado). Lido da planilha.
+- `variavelMes` = soma de TODOS os Gastos do mês (inclui `Mensal`). `saldoMes = limite − variavelMes` (número mensal reportado).
+- Semanas Dom–Sáb; caminhada: `remaining = limite`.
+  - Semana **past** (índice `i`, `n` total): `budget = remaining/(n−i)`; `value = budget − gastoNãoMensalDaSemana`; `remaining −= gastoNãoMensalDaSemana`.
+  - Ao chegar na semana **current**: `remaining −= totalMensalDiluido` (o Mensal do mês inteiro sai AQUI → diluído sobre current+future, nunca estoura uma semana passada). Depois `budget = remaining/(n−i)`; `saldoSemanaAtual = budget − gastoNãoMensalDaSemanaAtual`; `remaining −= gastoNãoMensalDaSemanaAtual`.
+  - Semanas **future**: `per = remaining / nFuturas`.
+- `Mensal` é sempre EXCLUÍDO do gasto por-semana (só entra via `saldoMes` e via a subtração forward em `remaining`).
+- Breakdown do `!mes`: rodapé lista `totalMensalDiluido` do mês.
+
+Sem Mensal, o algoritmo é idêntico ao atual (testes existentes seguem válidos). Só muda: (1) Mensal sai no ponto da semana current em vez de no início; (2) rename `totalMensal`→`totalMensalDiluido`; (3) expõe `saldoSemanaAtual`/`saldoMes`.
+
+### Task 1.1: `buildMonthlyOverview` — diluir `Mensal` pra frente, sem dupla subtração
 
 **Files:**
 - Modify: `src/monthly.ts`
 - Test: `tests/monthly.test.ts`
 
-Objetivo: trocar a distribuição "pool sobre TODAS as semanas" pela do Dashboard — `weeklyDynamic = saldoMes / remainingWeeks` (semanas current+future) — mantendo `Mensal` diluído (entra no `saldoMes`, sai do gasto semanal). `saldoMes = limite − variavelMes` onde `variavelMes` inclui `Mensal`.
+Objetivo: manter a caminhada sequencial atual (correta), mas mover a subtração do `Mensal` do início do pool pro ponto da semana `current` (dilui só sobre as semanas restantes). Renomear `totalMensal`→`totalMensalDiluido`, expor `saldoSemanaAtual`/`saldoMes`. Sem Mensal → comportamento idêntico ao atual.
 
-- [ ] **Step 1: Reescrever os testes** pra o modelo do Dashboard. Substituir os casos de distribuição por:
+- [ ] **Step 1: Atualizar o teste de `Mensal`.** Substituir o caso "Mensal reduces the pool and is excluded from weekly spend" por:
 
 ```ts
-it('semana atual usa saldoMes/remainingWeeks e exclui gasto Mensal', () => {
-  // now = 2026-07-15 (week3 current). Semanas current+future = 3,4,5 -> remainingWeeks=3.
+it('Mensal dilui pra frente (semanas restantes) e não estoura semana; sem dupla subtração', () => {
+  // now = 2026-07-15 (week3 current). Semanas: w1 01-04, w2 05-11, w3 12-18, w4 19-25, w5 26-31.
   const gastos = [
     g('14/07/2026 10:00:00', 200),          // week3, Semanal
-    g('10/07/2026 10:00:00', 900, 'Mensal'),// diluído: conta no mês, não na semana
+    g('10/07/2026 10:00:00', 900, 'Mensal'),// week2 (past) mas diluído pra frente
   ];
   const o = buildMonthlyOverview(now, 4000, gastos)!;
   const current = o.semanas.find((s) => s.status === 'current')!;
-  // variavelMes = 1100; saldoMes = 2900; weeklyDynamic = 2900/3 = 966.6667
-  // gastoSemanaAtual (não-Mensal) = 200 -> saldoSemanaAtual = 766.6667
-  expect(o.saldoMes).toBeCloseTo(2900, 5);
-  expect(current.value).toBeCloseTo(766.6667, 3);
+  // remaining=4000; w1,w2 past gastam 0 não-Mensal -> remaining=4000.
+  // na current: remaining -= 900 (Mensal) = 3100; budget = 3100/3 = 1033.3333;
+  // saldoSemanaAtual = 1033.3333 - 200 = 833.3333 (NÃO 766.67, que seria dupla subtração).
+  expect(current.value).toBeCloseTo(833.3333, 3);
+  expect(o.saldoMes).toBeCloseTo(2900, 5); // 4000 - 1100
   expect(o.totalMensalDiluido).toBeCloseTo(900, 5);
+  expect(o.saldoSemanaAtual).toBeCloseTo(833.3333, 3);
 });
 ```
 
-- [ ] **Step 2: Rodar** `npx vitest run tests/monthly.test.ts`. Esperado: FAIL.
-- [ ] **Step 3: Editar `src/monthly.ts`:** calcular `remainingWeeks` = nº de semanas `current`+`future`; `weeklyDynamic = saldoMes / remainingWeeks`; `saldoMes = limite − variavelMes` (variavelMes inclui Mensal); a semana `current`/`future` usa `weeklyDynamic`; `gastoSemanaAtual` e o gasto por-semana no breakdown EXCLUEM `Mensal`. Renomear `totalMensal` → `totalMensalDiluido` no `MonthlyOverview`.
-- [ ] **Step 4: Rodar** `npx vitest run tests/monthly.test.ts`. Esperado: PASS.
-- [ ] **Step 5: Commit:** `refactor(monthly): distribuição igual ao Dashboard, Mensal diluído consistente`.
+- [ ] **Step 2: Rodar** `npx vitest run tests/monthly.test.ts`. Esperado: FAIL (impl atual subtrai Mensal do pool no início).
+- [ ] **Step 3: Editar `src/monthly.ts`:**
+  - `pool` deixa de subtrair Mensal no início: `let remaining = limite` (era `limite - totalMensal`).
+  - Na iteração, quando `w.status === 'current'`, ANTES de calcular o budget da semana atual: `remaining -= totalMensalDiluido`.
+  - Renomear `totalMensal` → `totalMensalDiluido` no `MonthlyOverview`.
+  - Adicionar `saldoSemanaAtual: number` = `value` da semana `current` (0 se não houver).
+  - `saldoMes` continua `limite - totalMes` (totalMes inclui Mensal).
+- [ ] **Step 4: Rodar** `npx vitest run tests/monthly.test.ts`. Esperado: PASS (inclusive os testes sem Mensal, inalterados).
+- [ ] **Step 5: Commit:** `refactor(monthly): Mensal diluído pra frente; expõe saldoSemanaAtual/saldoMes`.
 
-### Task 1.2: Expor `saldoSemanaAtual` e `saldoMes` no overview
-
-**Files:**
-- Modify: `src/monthly.ts`
-- Test: `tests/monthly.test.ts`
-
-- [ ] **Step 1: Teste** que a semana `current` exposta bate com o valor que o bot deve responder:
-
-```ts
-it('expõe saldoSemanaAtual = valor da semana current', () => {
-  const gastos = [g('14/07/2026 10:00:00', 200)]; // week3 current
-  const o = buildMonthlyOverview(now, 4000, gastos)!;
-  const current = o.semanas.find((s) => s.status === 'current')!;
-  expect(o.saldoSemanaAtual).toBeCloseTo(current.value, 5);
-  expect(o.saldoMes).toBeCloseTo(3800, 5);
-});
-```
-
-- [ ] **Step 2: Rodar** o teste. Esperado: FAIL (`saldoSemanaAtual` não existe).
-- [ ] **Step 3: Adicionar** `saldoSemanaAtual: number` a `MonthlyOverview` e preenchê-lo com o `value` da semana `current` (0 se nenhuma).
-- [ ] **Step 4: Rodar** o teste. Esperado: PASS.
-- [ ] **Step 5: Commit:** `feat(monthly): expõe saldoSemanaAtual/saldoMes como fonte única de saldos`.
-
-### Task 1.3: `!saldo` e nova-despesa derivam do motor TS (não de `Dashboard!B14/B5`)
+### Task 1.2: `!saldo` e nova-despesa derivam do motor TS (não de `Dashboard!B14/B5`)
 
 **Files:**
 - Modify: `src/messageHandler.ts`, `src/googleSheets.ts`

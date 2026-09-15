@@ -261,7 +261,8 @@ function formatMonthly(o: MonthlyOverview): string {
 
   const saldo = o.saldoMes >= 0 ? money(o.saldoMes) : `⚠️ −${money(o.saldoMes)}`;
   lines.push('');
-  lines.push(`Fixos (Mensal): ${money(o.totalMensal)} · Saldo do mês: ${saldo}`);
+  const diluido = o.totalMensalDiluido > 0 ? `Diluído no mês (Mensal): ${money(o.totalMensalDiluido)} · ` : '';
+  lines.push(`${diluido}Saldo do mês: ${saldo}`);
   return lines.join('\n');
 }
 
