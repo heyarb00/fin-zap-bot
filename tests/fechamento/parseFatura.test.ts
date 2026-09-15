@@ -25,14 +25,14 @@ describe('parseParcela', () => {
 describe('parseFatura', () => {
   const f = parseFatura(csv);
 
-  it('exclui só o pagamento da fatura anterior (maior negativa)', () => {
-    expect(f.pagamentoAnterior).toBeCloseTo(-2000, 2);
-    // -50 (crédito in-cycle) permanece nas linhas
+  it('exclui pagamentos (fluxo de caixa); mantém reembolso de loja', () => {
+    expect(f.pagamentos).toBeCloseTo(-2000, 2);
+    // -50 é reembolso de loja (não é pagamento) -> permanece nas linhas
     expect(f.linhas.some((l) => l.valor === -50)).toBe(true);
     expect(f.linhas.some((l) => l.valor === -2000)).toBe(false);
   });
 
-  it('total = soma das linhas (créditos in-cycle contam)', () => {
+  it('total = gasto do ciclo (compras − reembolsos, sem pagamentos)', () => {
     // 100 + 20.90 + 1590 + 250 - 50 + 60 = 1970.90
     expect(f.total).toBeCloseTo(1970.9, 2);
   });

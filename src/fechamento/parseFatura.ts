@@ -25,9 +25,9 @@ export interface FaturaLine {
 }
 
 export interface FaturaParsed {
-  linhas: FaturaLine[]; // exclui o pagamento da fatura anterior
-  pagamentoAnterior: number; // a linha excluída (negativa), 0 se não houver
-  total: number; // soma das linhas = "valor total devido" da fatura
+  linhas: FaturaLine[]; // compras + reembolsos de loja (exclui pagamentos)
+  pagamentos: number; // soma das linhas de pagamento (negativas), excluídas do gasto
+  total: number; // soma das linhas = GASTO do ciclo (fixo + variável − reembolsos)
 }
 
 // 'R$ 1.234,56' | 'R$ -19.213,62' | 'R$ 8,00' -> number
@@ -53,8 +53,10 @@ export function parseParcela(raw: string): Parcela | null {
   return { n, total };
 }
 
-function isPagamentoFatura(estabelecimento: string): boolean {
-  return /pagamento de fatura/i.test(estabelecimento);
+// Cobre 'Pagamento de fatura' e 'Pagamentos Validos Normais' — qualquer pagamento
+// ao cartão (fluxo de caixa), distinto de um reembolso de compra.
+function isPagamento(estabelecimento: string): boolean {
+  return /pagamento/i.test(estabelecimento);
 }
 
 export function parseFatura(csv: string): FaturaParsed {
@@ -77,19 +79,15 @@ export function parseFatura(csv: string): FaturaParsed {
     });
   }
 
-  // O pagamento da fatura anterior = a linha 'Pagamento de fatura' mais negativa.
-  let prevIdx = -1;
-  let prevVal = 0;
-  all.forEach((l, i) => {
-    if (isPagamentoFatura(l.estabelecimento) && l.valor < prevVal) {
-      prevVal = l.valor;
-      prevIdx = i;
-    }
-  });
-
-  const linhas = all.filter((_, i) => i !== prevIdx);
+  // Pagamentos (fatura anterior, pré-pagamentos no ciclo, créditos de pagamento)
+  // são fluxo de caixa, não gasto: ficam de fora do total. Reembolso de loja
+  // (negativo com nome de estabelecimento normal) permanece e reduz o gasto.
+  const pagamentos = round2(
+    all.filter((l) => isPagamento(l.estabelecimento)).reduce((s, l) => s + l.valor, 0),
+  );
+  const linhas = all.filter((l) => !isPagamento(l.estabelecimento));
   const total = round2(linhas.reduce((s, l) => s + l.valor, 0));
-  return { linhas, pagamentoAnterior: prevIdx >= 0 ? prevVal : 0, total };
+  return { linhas, pagamentos, total };
 }
 
 function round2(n: number): number {
