@@ -23,24 +23,35 @@ export interface CategoriaTotal {
   total: number;
 }
 
+export const LIMITE_GRANDE_AVULSO = 500; // acima disso = grande avulso (pontual planejado)
+
 export interface ReconcileInput {
   fatura: ClassifyResult;
   meta: number; // Meta Fatura (ex.: 16000) — alvo, não previsão
   mesRef: number; // 1-12: mês do plano que esta fatura fecha (venc mês+1)
-  variavelLogado?: number; // total variável lançado no bot no ciclo (se disponível)
+  variavelLogado?: number; // total variável do dia a dia lançado no bot no ciclo
   assinaturasConhecidas?: string[]; // normalizadas, pra não sinalizar como novas
+  limiteGrandeAvulso?: number; // default LIMITE_GRANDE_AVULSO
+}
+
+export interface GrandeAvulso {
+  estabelecimento: string;
+  valor: number;
+  categoria: string;
 }
 
 export interface ReconcileResult {
   gasto: number;
   fixo: number;
-  variavel: number;
+  variavel: number; // variável total (dia a dia + grandes avulsos)
+  variavelDiaADia: number; // variável até o limite (o que se espera lançar)
+  grandesAvulsos: GrandeAvulso[]; // avulsos grandes (pontuais planejados)
   ajuste: number;
   meta: number;
   folgaVsMeta: number; // meta - gasto (>0 dentro do alvo)
-  novosFixos: NovoFixo[]; // parcelas novas (1ª parcela) + assinaturas novas
+  novosFixos: NovoFixo[]; // parcelas novas (1ª parcela)
   variavelPorCategoria: CategoriaTotal[];
-  deltaVariavelLogado: number | null; // variável da fatura - variável lançado
+  deltaVariavelLogado: number | null; // variável dia a dia da fatura - variável lançado
   relatorio: string;
 }
 
@@ -65,13 +76,21 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
       subtipo: l.subtipo,
     }));
 
-  const variavelPorCategoria = agruparCategoria(
-    fatura.linhas.filter((l) => l.tipo === 'Variavel'),
-  );
+  const limiteGrande = input.limiteGrandeAvulso ?? LIMITE_GRANDE_AVULSO;
+  const variaveis = fatura.linhas.filter((l) => l.tipo === 'Variavel');
+  const grandesAvulsos: GrandeAvulso[] = variaveis
+    .filter((l) => l.valor > limiteGrande)
+    .map((l) => ({ estabelecimento: l.estabelecimento, valor: l.valor, categoria: l.categoria }))
+    .sort((a, b) => b.valor - a.valor);
+  const totalGrandes = round2(grandesAvulsos.reduce((s, g) => s + g.valor, 0));
+  const variavelDiaADia = round2(fatura.variavel - totalGrandes);
+
+  const variavelPorCategoria = agruparCategoria(variaveis);
 
   const folgaVsMeta = round2(meta - fatura.total);
+  // Delta compara só o dia a dia (grandes avulsos são pontuais planejados).
   const deltaVariavelLogado =
-    input.variavelLogado === undefined ? null : round2(fatura.variavel - input.variavelLogado);
+    input.variavelLogado === undefined ? null : round2(variavelDiaADia - input.variavelLogado);
 
   const relatorio = montarRelatorio({
     mesRef,
@@ -79,6 +98,8 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
     meta,
     folgaVsMeta,
     novosFixos,
+    grandesAvulsos,
+    variavelDiaADia,
     variavelPorCategoria,
     deltaVariavelLogado,
   });
@@ -87,6 +108,8 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
     gasto: fatura.total,
     fixo: fatura.fixo,
     variavel: fatura.variavel,
+    variavelDiaADia,
+    grandesAvulsos,
     ajuste: fatura.ajuste,
     meta,
     folgaVsMeta,
@@ -115,6 +138,8 @@ function montarRelatorio(x: {
   meta: number;
   folgaVsMeta: number;
   novosFixos: NovoFixo[];
+  grandesAvulsos: GrandeAvulso[];
+  variavelDiaADia: number;
   variavelPorCategoria: CategoriaTotal[];
   deltaVariavelLogado: number | null;
 }): string {
@@ -123,6 +148,8 @@ function montarRelatorio(x: {
   L.push(`Gasto do ciclo: ${money(x.fatura.total)}`);
   L.push(`├ Fixo (assinaturas+parcelas): ${money(x.fatura.fixo)}`);
   L.push(`└ Variável: ${money(x.fatura.variavel)}`);
+  L.push(`   ├ dia a dia: ${money(x.variavelDiaADia)}`);
+  L.push(`   └ grandes avulsos: ${money(x.fatura.variavel - x.variavelDiaADia)}`);
   if (Math.abs(x.fatura.ajuste) >= 0.01) L.push(`  (reembolsos: ${money(x.fatura.ajuste)})`);
   L.push('');
   L.push(
@@ -134,9 +161,17 @@ function montarRelatorio(x: {
   if (x.deltaVariavelLogado !== null && Math.abs(x.deltaVariavelLogado) >= 0.01) {
     L.push(
       x.deltaVariavelLogado > 0
-        ? `⚠️ ${money(x.deltaVariavelLogado)} de variável na fatura sem lançamento no bot`
-        : `ℹ️ ${money(x.deltaVariavelLogado)} lançado a mais que a fatura (não-cartão?)`,
+        ? `⚠️ ${money(x.deltaVariavelLogado)} de variável (dia a dia) na fatura sem lançamento`
+        : `ℹ️ ${money(x.deltaVariavelLogado)} lançado a mais que a fatura`,
     );
+  }
+
+  if (x.grandesAvulsos.length > 0) {
+    L.push('');
+    L.push('💳 Grandes avulsos (confira se são pontuais planejados):');
+    for (const g of x.grandesAvulsos.slice(0, 8)) {
+      L.push(`  • ${g.estabelecimento}: ${money(g.valor)}`);
+    }
   }
 
   if (x.novosFixos.length > 0) {
