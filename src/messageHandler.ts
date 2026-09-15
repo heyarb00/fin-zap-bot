@@ -19,6 +19,7 @@ import { detectLimitAlerts } from './alerts';
 import { isInCurrentWeek, cellDateLabel } from './week';
 import { buildMonthlyOverview, saldosFromOverview, MonthlyOverview } from './monthly';
 import { runFechamento } from './fechamento';
+import { listCsvs, downloadFile } from './drive';
 
 const queue = new PQueue({ concurrency: 1 });
 
@@ -189,9 +190,10 @@ const HELP_TEXT = [
   '• `!mes`      → resumo do mês, semana a semana',
   '• `!categorias` → gastos do mês por categoria',
   '• `!desfazer` → apaga o último gasto lançado',
+  '• `!fechar`   → reconcilia a fatura mais nova da pasta do Drive',
   '• `!help`     → esta ajuda',
   '',
-  '• 📎 Fechamento: envie o CSV da fatura (app XP) aqui → reconcilia e registra na aba Faturas.',
+  '• 📎 Fechamento: suba o CSV da fatura (app XP) na pasta do Drive e mande `!fechar`.',
 ].join('\n');
 
 async function handleHelpCommand(msg: Message): Promise<void> {
@@ -325,6 +327,42 @@ async function handleCategoriasCommand(msg: Message): Promise<void> {
   }
 }
 
+// Núcleo do fechamento: reconcilia o CSV e registra (idempotente) na aba Faturas.
+async function processarFaturaCsv(csv: string): Promise<string> {
+  const [gastos, rules] = await Promise.all([listExpenses(), getCategoriaRules()]);
+  const out = runFechamento(csv, { gastos, meta: config.metaFatura, rules });
+  const status = await upsertFaturaRow(out.faturaRow);
+  const nota = status === 'atualizada' ? '\n\n♻️ Já tinha esse mês — atualizei.' : '';
+  return out.result.relatorio + nota;
+}
+
+// !fechar — lê o CSV mais novo da pasta do Drive e reconcilia. Via robusta
+// (o anexo do WhatsApp quebra no downloadMedia).
+async function handleFecharCommand(msg: Message): Promise<void> {
+  try {
+    if (!config.driveFolderId) {
+      await msg.reply('⚠️ Pasta do Drive não configurada (DRIVE_FOLDER_ID no .env).');
+      return;
+    }
+    const files = await listCsvs(config.driveFolderId);
+    if (files.length === 0) {
+      await msg.reply('📂 Nenhum CSV na pasta do Drive. Suba a fatura lá e mande !fechar.');
+      return;
+    }
+    const novo = files[0];
+    const csv = await downloadFile(novo.id);
+    const relatorio = await processarFaturaCsv(csv);
+    await msg.reply(`📄 ${novo.name}\n\n${relatorio}`);
+  } catch (err) {
+    logger.error({ err }, 'fechar command failed');
+    try {
+      await msg.reply('⚠️ Não consegui ler/processar a fatura do Drive.');
+    } catch (replyErr) {
+      logger.error({ err: replyErr }, 'failed to send fechar error reply');
+    }
+  }
+}
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 // Recebe o CSV/OFX da fatura XP como anexo no grupo, reconcilia e responde o
@@ -350,7 +388,8 @@ async function handleFechamentoDocument(msg: Message): Promise<void> {
     logger.error('downloadMedia failed after retries');
     try {
       await msg.reply(
-        '⚠️ Não consegui baixar o CSV do WhatsApp. Tenta reenviar em alguns segundos.',
+        '⚠️ O WhatsApp Web não deixa eu baixar o anexo aqui.\n' +
+          'Sobe o CSV na pasta do Drive e manda *!fechar*.',
       );
     } catch (replyErr) {
       logger.error({ err: replyErr }, 'failed to send download-fail reply');
@@ -369,11 +408,7 @@ async function handleFechamentoDocument(msg: Message): Promise<void> {
 
   try {
     const csv = Buffer.from(media.data, 'base64').toString('utf8');
-    const [gastos, rules] = await Promise.all([listExpenses(), getCategoriaRules()]);
-    const out = runFechamento(csv, { gastos, meta: config.metaFatura, rules });
-    const status = await upsertFaturaRow(out.faturaRow);
-    const nota = status === 'atualizada' ? '\n\n♻️ Já tinha esse mês — atualizei.' : '';
-    await msg.reply(out.result.relatorio + nota);
+    await msg.reply(await processarFaturaCsv(csv));
   } catch (err) {
     logger.error({ err }, 'fechamento failed');
     try {
@@ -443,6 +478,10 @@ export async function handleMessage(msg: Message): Promise<void> {
     }
     if (cmd === '!desfazer' || cmd === '!undo') {
       await queue.add(() => handleUndoCommand(msg));
+      return;
+    }
+    if (cmd === '!fechar' || cmd === '!fatura') {
+      await queue.add(() => handleFecharCommand(msg));
       return;
     }
 
