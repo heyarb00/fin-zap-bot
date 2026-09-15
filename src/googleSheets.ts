@@ -43,10 +43,39 @@ export async function appendExpense(row: ExpenseRow): Promise<void> {
 
 const FATURAS_SHEET = 'Faturas';
 
-// Registra um fechamento na aba Faturas (histórico de calibração).
+// Registra um fechamento na aba Faturas de forma idempotente: se já existe linha
+// pro mês (coluna B = YYYY-MM), atualiza; senão acrescenta. Evita duplicar quando
+// o mesmo CSV é reenviado (por engano ou pra corrigir).
 // row = [carimbo, YYYY-MM, gasto, fixo, variavel, diaADia, grandes, pagamentos]
-export async function appendFaturaRow(row: (string | number)[]): Promise<void> {
+export async function upsertFaturaRow(
+  row: (string | number)[],
+): Promise<'inserida' | 'atualizada'> {
   const api = await getClient();
+  const res = await api.spreadsheets.values.get({
+    spreadsheetId: config.spreadsheetId,
+    range: `${FATURAS_SHEET}!A:H`,
+    valueRenderOption: 'UNFORMATTED_VALUE',
+  });
+  const rows = res.data.values ?? [];
+  const mes = String(row[1]);
+  let foundIdx = -1;
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i]?.[1] ?? '') === mes) {
+      foundIdx = i;
+      break;
+    }
+  }
+  if (foundIdx >= 0) {
+    const rowNumber = foundIdx + 1; // 1-based (header na linha 1)
+    await api.spreadsheets.values.update({
+      spreadsheetId: config.spreadsheetId,
+      range: `${FATURAS_SHEET}!A${rowNumber}:H${rowNumber}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [row] },
+    });
+    logger.info({ row, rowNumber }, 'fatura row updated');
+    return 'atualizada';
+  }
   await api.spreadsheets.values.append({
     spreadsheetId: config.spreadsheetId,
     range: `${FATURAS_SHEET}!A:H`,
@@ -55,6 +84,7 @@ export async function appendFaturaRow(row: (string | number)[]): Promise<void> {
     requestBody: { values: [row] },
   });
   logger.info({ row }, 'fatura row appended');
+  return 'inserida';
 }
 
 export interface Saldos {

@@ -5,7 +5,7 @@ import { logger } from './logger';
 import { parseExpense, TipoGasto } from './parser';
 import {
   appendExpense,
-  appendFaturaRow,
+  upsertFaturaRow,
   readBudgets,
   listExpenses,
   undoLastExpense,
@@ -325,29 +325,55 @@ async function handleCategoriasCommand(msg: Message): Promise<void> {
   }
 }
 
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
 // Recebe o CSV/OFX da fatura XP como anexo no grupo, reconcilia e responde o
-// relatório de fechamento, registrando na aba Faturas. Ignora anexos não-CSV.
+// relatório de fechamento, registrando (idempotente) na aba Faturas.
 async function handleFechamentoDocument(msg: Message): Promise<void> {
+  const meta = msg as unknown as { type?: string; fromMe?: boolean };
+  logger.info({ type: meta.type, fromMe: meta.fromMe }, 'fechamento: media message received');
+
+  // downloadMedia usa um evaluate interno do WhatsApp Web que pode falhar de
+  // forma transitória (mídia ainda 'RESOLVING', sobretudo em msg fromMe). Retry.
   let media: { data: string; mimetype: string; filename?: string } | undefined;
-  try {
-    media = (await msg.downloadMedia()) as typeof media;
-  } catch (err) {
-    logger.error({ err }, 'failed to download media');
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      media = (await msg.downloadMedia()) as typeof media;
+      if (media && media.data) break;
+      logger.warn({ attempt }, 'downloadMedia returned empty');
+    } catch (err) {
+      logger.warn({ attempt, err: (err as Error)?.message }, 'downloadMedia attempt failed');
+    }
+    if (attempt < 4) await sleep(attempt * 1500);
+  }
+  if (!media || !media.data) {
+    logger.error('downloadMedia failed after retries');
+    try {
+      await msg.reply(
+        '⚠️ Não consegui baixar o CSV do WhatsApp. Tenta reenviar em alguns segundos.',
+      );
+    } catch (replyErr) {
+      logger.error({ err: replyErr }, 'failed to send download-fail reply');
+    }
     return;
   }
-  if (!media || !media.data) return;
 
   const name = (media.filename ?? '').toLowerCase();
   const mime = (media.mimetype ?? '').toLowerCase();
-  const looksCsv = name.endsWith('.csv') || name.endsWith('.ofx') || mime.includes('csv') || mime.includes('text');
-  if (!looksCsv) return;
+  const looksCsv =
+    name.endsWith('.csv') || name.endsWith('.ofx') || mime.includes('csv') || mime.includes('text');
+  if (!looksCsv) {
+    logger.info({ name, mime }, 'documento não-CSV ignorado');
+    return;
+  }
 
   try {
     const csv = Buffer.from(media.data, 'base64').toString('utf8');
     const [gastos, rules] = await Promise.all([listExpenses(), getCategoriaRules()]);
     const out = runFechamento(csv, { gastos, meta: config.metaFatura, rules });
-    await appendFaturaRow(out.faturaRow);
-    await msg.reply(out.result.relatorio);
+    const status = await upsertFaturaRow(out.faturaRow);
+    const nota = status === 'atualizada' ? '\n\n♻️ Já tinha esse mês — atualizei.' : '';
+    await msg.reply(out.result.relatorio + nota);
   } catch (err) {
     logger.error({ err }, 'fechamento failed');
     try {
