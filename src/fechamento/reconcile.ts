@@ -3,8 +3,7 @@
 //
 // Filosofia: a fatura é a verdade do ciclo. Fixo+Variável = gasto. O relatório é
 // forward-looking (o que muda pro próximo ciclo), não um "onde estourou".
-import { ClassifyResult, ClassifiedLine } from './classify';
-import { normalize } from '../categorize';
+import { ClassifyResult } from './classify';
 
 const MESES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -18,11 +17,6 @@ export interface NovoFixo {
   subtipo: string;
 }
 
-export interface CategoriaTotal {
-  categoria: string;
-  total: number;
-}
-
 export const LIMITE_GRANDE_AVULSO = 500; // acima disso = grande avulso (pontual planejado)
 
 export interface ReconcileInput {
@@ -30,14 +24,12 @@ export interface ReconcileInput {
   meta: number; // Meta Fatura (ex.: 16000) — alvo, não previsão
   mesRef: number; // 1-12: mês do plano que esta fatura fecha (venc mês+1)
   variavelLogado?: number; // total variável do dia a dia lançado no bot no ciclo
-  assinaturasConhecidas?: string[]; // normalizadas, pra não sinalizar como novas
   limiteGrandeAvulso?: number; // default LIMITE_GRANDE_AVULSO
 }
 
 export interface GrandeAvulso {
   estabelecimento: string;
   valor: number;
-  categoria: string;
 }
 
 export interface ReconcileResult {
@@ -50,7 +42,6 @@ export interface ReconcileResult {
   meta: number;
   folgaVsMeta: number; // meta - gasto (>0 dentro do alvo)
   novosFixos: NovoFixo[]; // parcelas novas (1ª parcela)
-  variavelPorCategoria: CategoriaTotal[];
   deltaVariavelLogado: number | null; // variável dia a dia da fatura - variável lançado
   relatorio: string;
 }
@@ -61,12 +52,7 @@ function round2(n: number): number {
 
 export function reconcile(input: ReconcileInput): ReconcileResult {
   const { fatura, meta, mesRef } = input;
-  const conhecidas = new Set((input.assinaturasConhecidas ?? []).map(normalize));
 
-  // Novos fixos = parcelamentos que começam neste ciclo (1ª parcela). Assinaturas
-  // já são conhecidas por construção (senão teriam caído em Variável), então não
-  // entram aqui. `conhecidas` reservado pra futura detecção de assinatura nova.
-  void conhecidas;
   const novosFixos: NovoFixo[] = fatura.linhas
     .filter((l) => l.tipo === 'Fixo' && l.subtipo === 'Parcela' && l.parcela?.n === 1)
     .map((l) => ({
@@ -80,12 +66,10 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
   const variaveis = fatura.linhas.filter((l) => l.tipo === 'Variavel');
   const grandesAvulsos: GrandeAvulso[] = variaveis
     .filter((l) => l.valor > limiteGrande)
-    .map((l) => ({ estabelecimento: l.estabelecimento, valor: l.valor, categoria: l.categoria }))
+    .map((l) => ({ estabelecimento: l.estabelecimento, valor: l.valor }))
     .sort((a, b) => b.valor - a.valor);
   const totalGrandes = round2(grandesAvulsos.reduce((s, g) => s + g.valor, 0));
   const variavelDiaADia = round2(fatura.variavel - totalGrandes);
-
-  const variavelPorCategoria = agruparCategoria(variaveis);
 
   const folgaVsMeta = round2(meta - fatura.total);
   // Delta compara só o dia a dia (grandes avulsos são pontuais planejados).
@@ -100,7 +84,6 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
     novosFixos,
     grandesAvulsos,
     variavelDiaADia,
-    variavelPorCategoria,
     deltaVariavelLogado,
   });
 
@@ -114,18 +97,9 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
     meta,
     folgaVsMeta,
     novosFixos,
-    variavelPorCategoria,
     deltaVariavelLogado,
     relatorio,
   };
-}
-
-function agruparCategoria(linhas: ClassifiedLine[]): CategoriaTotal[] {
-  const m = new Map<string, number>();
-  for (const l of linhas) m.set(l.categoria, round2((m.get(l.categoria) ?? 0) + l.valor));
-  return [...m.entries()]
-    .map(([categoria, total]) => ({ categoria, total }))
-    .sort((a, b) => b.total - a.total);
 }
 
 function money(v: number): string {
@@ -140,7 +114,6 @@ function montarRelatorio(x: {
   novosFixos: NovoFixo[];
   grandesAvulsos: GrandeAvulso[];
   variavelDiaADia: number;
-  variavelPorCategoria: CategoriaTotal[];
   deltaVariavelLogado: number | null;
 }): string {
   const L: string[] = [];
@@ -183,12 +156,5 @@ function montarRelatorio(x: {
     }
   }
 
-  if (x.variavelPorCategoria.length > 0) {
-    L.push('');
-    L.push('Variável por categoria:');
-    for (const c of x.variavelPorCategoria.slice(0, 6)) {
-      L.push(`  • ${c.categoria}: ${money(c.total)}`);
-    }
-  }
   return L.join('\n');
 }

@@ -99,12 +99,12 @@ function currentYearMonth(): string {
 
 async function setupGastos(api: sheets_v4.Sheets, sheetId: number): Promise<sheets_v4.Schema$Request[]> {
   await clearSheet(api, SHEET_GASTOS);
-  await writeValues(api, `${SHEET_GASTOS}!A1:E1`, [
-    ['Data/Hora', 'Valor', 'Descrição', 'Tipo de Gasto', 'Categoria'],
+  await writeValues(api, `${SHEET_GASTOS}!A1:D1`, [
+    ['Data/Hora', 'Valor', 'Descrição', 'Tipo de Gasto'],
   ]);
 
   return [
-    headerFormatRequest(sheetId, 5),
+    headerFormatRequest(sheetId, 4),
     {
       repeatCell: {
         range: { sheetId, startRowIndex: 1, startColumnIndex: 1, endColumnIndex: 2 },
