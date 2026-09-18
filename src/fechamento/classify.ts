@@ -1,7 +1,6 @@
 // Classifica cada linha da fatura em Fixo (assinatura/parcela), Variável (avulso)
 // ou Ajuste (crédito/estorno in-cycle). Por construção, Fixo+Variável+Ajuste = total.
 import { FaturaLine } from './parseFatura';
-import { CategoryRule, categorize, normalize, SEED_RULES } from '../categorize';
 
 export type FaturaTipo = 'Fixo' | 'Variavel' | 'Ajuste';
 export type FaturaSubtipo = 'Assinatura' | 'Parcela' | 'Avulso' | 'Credito';
@@ -9,7 +8,6 @@ export type FaturaSubtipo = 'Assinatura' | 'Parcela' | 'Avulso' | 'Credito';
 export interface ClassifiedLine extends FaturaLine {
   tipo: FaturaTipo;
   subtipo: FaturaSubtipo;
-  categoria: string;
 }
 
 export interface ClassifyResult {
@@ -37,34 +35,35 @@ export const SUBSCRIPTION_MERCHANTS = [
   'yelumseg',
 ];
 
+function normalize(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function isSubscription(estabelecimento: string): boolean {
   const d = normalize(estabelecimento);
   return SUBSCRIPTION_MERCHANTS.some((m) => d.includes(m));
 }
 
-export function classifyLine(line: FaturaLine, rules: CategoryRule[]): ClassifiedLine {
+export function classifyLine(line: FaturaLine): ClassifiedLine {
   if (line.valor < 0) {
-    return { ...line, tipo: 'Ajuste', subtipo: 'Credito', categoria: 'Ajuste' };
+    return { ...line, tipo: 'Ajuste', subtipo: 'Credito' };
   }
   if (line.parcela && line.parcela.total > 1) {
-    return { ...line, tipo: 'Fixo', subtipo: 'Parcela', categoria: 'Parcela' };
+    return { ...line, tipo: 'Fixo', subtipo: 'Parcela' };
   }
   if (isSubscription(line.estabelecimento)) {
-    return { ...line, tipo: 'Fixo', subtipo: 'Assinatura', categoria: 'Assinatura' };
+    return { ...line, tipo: 'Fixo', subtipo: 'Assinatura' };
   }
-  return {
-    ...line,
-    tipo: 'Variavel',
-    subtipo: 'Avulso',
-    categoria: categorize(line.estabelecimento, rules),
-  };
+  return { ...line, tipo: 'Variavel', subtipo: 'Avulso' };
 }
 
-export function classifyFatura(
-  linhas: FaturaLine[],
-  rules: CategoryRule[] = SEED_RULES,
-): ClassifyResult {
-  const classified = linhas.map((l) => classifyLine(l, rules));
+export function classifyFatura(linhas: FaturaLine[]): ClassifyResult {
+  const classified = linhas.map((l) => classifyLine(l));
   const sum = (t: FaturaTipo) =>
     round2(classified.filter((l) => l.tipo === t).reduce((s, l) => s + l.valor, 0));
   const fixo = sum('Fixo');

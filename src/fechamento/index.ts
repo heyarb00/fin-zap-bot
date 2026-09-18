@@ -5,7 +5,6 @@
 import { parseFatura } from './parseFatura';
 import { classifyFatura } from './classify';
 import { reconcile, ReconcileResult } from './reconcile';
-import { CategoryRule, SEED_RULES } from '../categorize';
 import { cellToYmd } from '../week';
 
 export interface GastoLog {
@@ -17,7 +16,6 @@ export interface GastoLog {
 export interface FechamentoDeps {
   gastos: GastoLog[]; // pra calcular o variável dia a dia já lançado no ciclo
   meta: number; // Meta Fatura (alvo)
-  rules?: CategoryRule[]; // dicionário de categorias (default SEED_RULES)
   limiteGrandeAvulso?: number;
 }
 
@@ -48,7 +46,7 @@ function inferirCiclo(datas: string[]): { ano: number; mes: number } {
 
 export function runFechamento(csv: string, deps: FechamentoDeps): FechamentoOutput {
   const parsed = parseFatura(csv);
-  const fatura = classifyFatura(parsed.linhas, deps.rules ?? SEED_RULES);
+  const fatura = classifyFatura(parsed.linhas);
 
   const avulsasDatas = parsed.linhas.filter((l) => l.parcela === null).map((l) => l.data);
   const { ano, mes } = inferirCiclo(avulsasDatas);
