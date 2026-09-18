@@ -39,11 +39,14 @@ export async function appendExpense(row: ExpenseRow): Promise<void> {
   logger.info({ row }, 'expense appended');
 }
 
-const FATURAS_SHEET = 'Faturas';
+const FATURAS_HEADER_ROW = 17;
+const FATURAS_DATA_START = 18;
+const DASHBOARD_SHEET = 'Dashboard';
 
-// Registra um fechamento na aba Faturas de forma idempotente: se já existe linha
-// pro mês (coluna B = YYYY-MM), atualiza; senão acrescenta. Evita duplicar quando
-// o mesmo CSV é reenviado (por engano ou pra corrigir).
+// Registra um fechamento no Dashboard (bloco A17:H) de forma idempotente: se já
+// existe linha pro mês (coluna B = YYYY-MM), atualiza; senão escreve na primeira
+// linha vazia após os dados existentes. Não usa append (erra dentro de aba com
+// outros dados acima/abaixo).
 // row = [carimbo, YYYY-MM, gasto, fixo, variavel, diaADia, grandes, pagamentos]
 export async function upsertFaturaRow(
   row: (string | number)[],
@@ -51,37 +54,37 @@ export async function upsertFaturaRow(
   const api = await getClient();
   const res = await api.spreadsheets.values.get({
     spreadsheetId: config.spreadsheetId,
-    range: `${FATURAS_SHEET}!A:H`,
+    range: `${DASHBOARD_SHEET}!A${FATURAS_DATA_START}:H`,
     valueRenderOption: 'UNFORMATTED_VALUE',
   });
   const rows = res.data.values ?? [];
   const mes = String(row[1]);
   let foundIdx = -1;
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = 0; i < rows.length; i++) {
     if (String(rows[i]?.[1] ?? '') === mes) {
       foundIdx = i;
       break;
     }
   }
   if (foundIdx >= 0) {
-    const rowNumber = foundIdx + 1; // 1-based (header na linha 1)
+    const rowNumber = FATURAS_DATA_START + foundIdx;
     await api.spreadsheets.values.update({
       spreadsheetId: config.spreadsheetId,
-      range: `${FATURAS_SHEET}!A${rowNumber}:H${rowNumber}`,
+      range: `${DASHBOARD_SHEET}!A${rowNumber}:H${rowNumber}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [row] },
     });
     logger.info({ row, rowNumber }, 'fatura row updated');
     return 'atualizada';
   }
-  await api.spreadsheets.values.append({
+  const nextRow = FATURAS_DATA_START + rows.length;
+  await api.spreadsheets.values.update({
     spreadsheetId: config.spreadsheetId,
-    range: `${FATURAS_SHEET}!A:H`,
+    range: `${DASHBOARD_SHEET}!A${nextRow}:H${nextRow}`,
     valueInputOption: 'USER_ENTERED',
-    insertDataOption: 'INSERT_ROWS',
     requestBody: { values: [row] },
   });
-  logger.info({ row }, 'fatura row appended');
+  logger.info({ row, rowNumber: nextRow }, 'fatura row inserted');
   return 'inserida';
 }
 
